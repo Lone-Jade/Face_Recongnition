@@ -1,0 +1,15 @@
+# 对所有 C/C++ 和头文件使用 LF（跨平台一致）
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+
+# Keil 工程文件用 CRLF（Windows 原生）
+*.uvprojx text eol=crlf
+*.uvoptx text eol=crlf
+
+# 二进制文件不处理
+*.bin binary
+*.hex binary
+*.axf binary
+*.elf binary
