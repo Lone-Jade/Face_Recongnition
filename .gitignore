@@ -47,6 +47,14 @@ Startup/
 .DS_Store
 Thumbs.db
 
+# =============== Python / face_detection ===============
+__pycache__/
+*.pyc
+*.pyo
+face_detection/WIDERFace/
+face_detection/output/
+face_detection/*.zip
+
 # =============== 其他 ===============
 *.rar
 *.zip

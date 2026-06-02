@@ -1,0 +1,47 @@
+# ============================================================
+# 轻量级人脸检测模型训练 — Python 环境依赖
+# 目标: STM32H747I-DISCO (Cube.AI 部署)
+# ============================================================
+# 安装方式: pip install -r requirements.txt
+# 建议 Python 版本: 3.9 ~ 3.13
+# ============================================================
+
+# ---------- 核心深度学习框架 ----------
+# GPU 训练 (推荐): 去 pytorch.org 选择与你 CUDA 版本匹配的安装命令
+#   例如 CUDA 12.1: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#   例如 CUDA 11.8: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# CPU 训练 (小规模测试可行, 大规模训练很慢):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+# 注意: 下面的版本约束很宽松, 请根据你的 CUDA 版本自行选择 PyTorch 版本
+#       只要是 PyTorch 2.0+ 即可 (QAT API 在 2.0+ 稳定)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# ---------- 图像处理 ----------
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# ---------- 数值计算 ----------
+numpy>=1.24.0
+scipy>=1.10.0
+
+# ---------- 模型导出 (ONNX) ----------
+onnx>=1.14.0
+onnxruntime>=1.15.0
+
+# ---------- 模型导出 (TFLite, 可选) ----------
+# 方案A: 通过 onnx2tf 转换 ONNX→TFLite
+# onnx2tf>=1.20.0
+# tensorflow>=2.13.0
+# 方案B: 通过 onnx-tf 转换
+# onnx-tf>=1.10.0
+# tensorflow>=2.13.0
+
+# ---------- 训练辅助 ----------
+tqdm>=4.65.0
+matplotlib>=3.7.0
+
+# ---------- 评估 (可选) ----------
+# pycocotools>=2.0.7      # COCO mAP 评估 (Windows 安装困难, 项目已内置自实现 mAP)
+#                          # 如需安装: pip install pycocotools-windows
