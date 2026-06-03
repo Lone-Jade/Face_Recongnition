@@ -15,19 +15,24 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from typing import List, Tuple, Optional, Dict
 
-from config import (WIDER_TRAIN_IMG, WIDER_VAL_IMG,
-                    WIDER_TRAIN_ANN, WIDER_VAL_ANN,
-                    IMAGE_SIZE, BATCH_SIZE, DIFFICULTY)
+from config import (
+    WIDER_TRAIN_IMG,
+    WIDER_VAL_IMG,
+    WIDER_TRAIN_ANN,
+    WIDER_VAL_ANN,
+    IMAGE_SIZE,
+    BATCH_SIZE,
+    DIFFICULTY,
+)
 from utils.augment import TrainAugmentation, ValTransform
 
 
 # ============================================================
 # WIDER Face 注解解析
 # ============================================================
-def parse_wider_annotation(ann_path: str,
-                           img_dir: str,
-                           difficulty: str = "easy_medium",
-                           max_images: int = None) -> List[Dict]:
+def parse_wider_annotation(
+    ann_path: str, img_dir: str, difficulty: str = "easy_medium", max_images: int = None
+) -> List[Dict]:
     """
     解析 WIDER Face 标注文件, 返回图片列表。
 
@@ -55,7 +60,7 @@ def parse_wider_annotation(ann_path: str,
     """
     samples = []
 
-    with open(ann_path, 'r') as f:
+    with open(ann_path, "r") as f:
         lines = f.readlines()
 
     idx = 0
@@ -106,10 +111,12 @@ def parse_wider_annotation(ann_path: str,
             if num_faces == 0:
                 continue  # 原始标注就没有人脸的图片
 
-        samples.append({
-            'path': img_full_path,
-            'boxes': boxes,
-        })
+        samples.append(
+            {
+                "path": img_full_path,
+                "boxes": boxes,
+            }
+        )
 
         if max_images and len(samples) >= max_images:
             break
@@ -120,8 +127,7 @@ def parse_wider_annotation(ann_path: str,
     return samples
 
 
-def _filter_by_difficulty(w: int, h: int, blur: int,
-                           difficulty: str) -> bool:
+def _filter_by_difficulty(w: int, h: int, blur: int, difficulty: str) -> bool:
     """
     根据 WIDER Face 难度定义过滤脸孔。
 
@@ -165,9 +171,14 @@ class WiderFaceDataset(Dataset):
       boxes: [N, 5]    张量 [x, y, w, h, label]
     """
 
-    def __init__(self, ann_path: str, img_dir: str,
-                 transform=None, difficulty: str = "easy_medium",
-                 max_images: int = None):
+    def __init__(
+        self,
+        ann_path: str,
+        img_dir: str,
+        transform=None,
+        difficulty: str = "easy_medium",
+        max_images: int = None,
+    ):
         """
         Args:
             ann_path:   标注 txt 路径
@@ -179,8 +190,7 @@ class WiderFaceDataset(Dataset):
         self.img_dir = img_dir
         self.transform = transform
 
-        self.samples = parse_wider_annotation(
-            ann_path, img_dir, difficulty, max_images)
+        self.samples = parse_wider_annotation(ann_path, img_dir, difficulty, max_images)
 
         print(f"[Dataset] {len(self.samples)} images ready")
 
@@ -191,7 +201,7 @@ class WiderFaceDataset(Dataset):
         sample = self.samples[idx]
 
         # 加载图片
-        image = cv2.imread(sample['path'])
+        image = cv2.imread(sample["path"])
         if image is None:
             # 偶尔有损坏的图片文件, 返回下一张
             print(f"[Warning] Failed to load: {sample['path']}")
@@ -200,7 +210,7 @@ class WiderFaceDataset(Dataset):
         image = image.astype(np.float32)
 
         # 准备标注: [x, y, w, h] → [x, y, w, h, label]
-        boxes = np.array(sample['boxes'], dtype=np.float32)
+        boxes = np.array(sample["boxes"], dtype=np.float32)
         if len(boxes) > 0:
             labels = np.ones((len(boxes), 1), dtype=np.float32)
             boxes = np.hstack([boxes, labels])
@@ -217,10 +227,12 @@ class WiderFaceDataset(Dataset):
 # ============================================================
 # DataLoader 工厂函数
 # ============================================================
-def create_dataloaders(batch_size: int = BATCH_SIZE,
-                       num_workers: int = 4,
-                       max_train_images: int = None,
-                       max_val_images: int = None) -> Tuple[DataLoader, DataLoader]:
+def create_dataloaders(
+    batch_size: int = BATCH_SIZE,
+    num_workers: int = 4,
+    max_train_images: int = None,
+    max_val_images: int = None,
+) -> Tuple[DataLoader, DataLoader]:
     """
     创建训练和验证 DataLoader。
 
@@ -277,8 +289,9 @@ def create_dataloaders(batch_size: int = BATCH_SIZE,
     return train_loader, val_loader
 
 
-def _collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor]]
-                ) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
+def _collate_fn(
+    batch: List[Tuple[torch.Tensor, torch.Tensor]],
+) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
     """
     自定义 batch collate: 每张图的框数不同, 不使用默认 stack。
 
@@ -294,8 +307,8 @@ def _collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor]]
     for img, boxes in batch:
         images.append(img)
         if len(boxes) > 0:
-            boxes_list.append(boxes[:, :4])     # [x, y, w, h]
-            labels_list.append(boxes[:, 4])     # label (全1 = face)
+            boxes_list.append(boxes[:, :4])  # [x, y, w, h]
+            labels_list.append(boxes[:, 4])  # label (全1 = face)
         else:
             boxes_list.append(torch.zeros((0, 4)))
             labels_list.append(torch.zeros(0))
@@ -327,8 +340,8 @@ if __name__ == "__main__":
     if os.path.exists(WIDER_TRAIN_ANN):
         # 快速测试: 只加载 100 张图
         loader, _ = create_dataloaders(
-            batch_size=4, num_workers=0,
-            max_train_images=100, max_val_images=10)
+            batch_size=4, num_workers=0, max_train_images=100, max_val_images=10
+        )
 
         images, boxes_list, labels_list = next(iter(loader))
         print(f"\nSample batch:")

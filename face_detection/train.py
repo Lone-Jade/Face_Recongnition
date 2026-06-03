@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import json
+import signal
 import argparse
 import numpy as np
 import matplotlib
@@ -108,7 +109,8 @@ def validate(model, dataloader, criterion, device):
     all_predictions = []
     all_groundtruths = []
 
-    for images, boxes_list, labels_list in dataloader:
+    print(f"  [Val] Running validation on {len(dataloader)} batches...")
+    for batch_idx, (images, boxes_list, labels_list) in enumerate(dataloader):
         images = images.to(device)
 
         # 损失
@@ -135,15 +137,18 @@ def validate(model, dataloader, criterion, device):
         pred_boxes_list, pred_scores_list = batched_nms(pred_boxes, scores)
 
         for b in range(images.size(0)):
-            # 预测结果 (反归一化到像素坐标)
+            # 预测结果 (保持在 GPU)
             pred_boxes_abs = pred_boxes_list[b] * IMAGE_SIZE
             all_predictions.append((pred_boxes_abs, pred_scores_list[b]))
 
-            # GT 结果 (像素坐标)
-            gt_boxes_abs = boxes_list[b].clone()
-            all_groundtruths.append((gt_boxes_abs, labels_list[b]))
+            # GT 结果 (移到 GPU 以与预测结果设备一致)
+            all_groundtruths.append((boxes_list[b].clone().to(device), labels_list[b]))
+
+        if batch_idx % 10 == 0:
+            print(f"  [Val] batch {batch_idx}/{len(dataloader)}")
 
     # 计算 mAP
+    print(f"  [Val] Computing mAP over {len(all_predictions)} images...")
     map_results = compute_map(all_predictions, all_groundtruths)
 
     return {
@@ -288,11 +293,24 @@ def main():
         print(f"[Resume] Resuming from epoch {start_epoch}")
 
     # ============================================================
+    # Ctrl+C 优雅退出: 自动保存 checkpoint
+    # ============================================================
+    interrupted = False
+
+    def _signal_handler(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+        print(f"\n\n[Interrupt] Ctrl+C detected. Saving checkpoint before exit...")
+
+    signal.signal(signal.SIGINT, _signal_handler)
+
+    # ============================================================
     # 训练循环
     # ============================================================
     print(f"\n{'='*60}")
     print(f"Starting training: {args.epochs} epochs, {args.batch_size} batch_size")
     print(f"Initial LR: {args.lr}, Optimizer: {OPTIMIZER}")
+    print(f"  (Ctrl+C to pause — auto-saves checkpoint)")
     print(f"{'='*60}\n")
 
     for epoch in range(start_epoch, args.epochs + 1):
@@ -304,7 +322,7 @@ def main():
         )
 
         # 验证 (每 5 个 epoch 或第一个/最后一个)
-        if epoch % 5 == 0 or epoch == 1 or epoch == args.epochs:
+        if epoch % 10 == 0 or epoch == 1 or epoch == args.epochs:
             val_metrics = validate(model, val_loader, criterion, device)
         else:
             val_metrics = {"loss": 0.0, "mAP": 0.0}
@@ -322,7 +340,7 @@ def main():
         epoch_time = time.time() - epoch_start
 
         # 日志输出
-        if epoch % 5 == 0 or epoch == 1:
+        if epoch % 10 == 0 or epoch == 1:
             print(f"\n{'='*40}")
             print(f"Epoch {epoch}/{args.epochs} completed in {epoch_time:.1f}s")
             print(f"  Train Loss: {train_metrics['loss']:.4f}")
@@ -351,7 +369,7 @@ def main():
                 },
                 best_path,
             )
-            print(f"  ✓ Best model saved (mAP={best_map:.4f}) → {best_path}")
+            print(f"  [Best] model saved (mAP={best_map:.4f}) -> {best_path}")
 
         # 定期保存 checkpoint (每 30 epoch)
         if epoch % 30 == 0:
@@ -367,7 +385,26 @@ def main():
                 },
                 ckpt_path,
             )
-            print(f"  Checkpoint saved → {ckpt_path}")
+            print(f"  Checkpoint saved -> {ckpt_path}")
+
+        # Ctrl+C 中断: 保存断点后退出
+        if interrupted:
+            ckpt_path = os.path.join(MODEL_DIR, "checkpoint_interrupt.pth")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                    "best_map": best_map,
+                    "history": history,
+                },
+                ckpt_path,
+            )
+            print(f"\n  [Interrupt] Checkpoint saved -> {ckpt_path}")
+            print(f"  Resume with: python train.py --resume {ckpt_path}")
+            print(f"  Progress: {epoch}/{args.epochs} epochs, best mAP={best_map:.4f}")
+            sys.exit(0)
 
     # ============================================================
     # 训练结束: 保存最终模型 + 绘制曲线

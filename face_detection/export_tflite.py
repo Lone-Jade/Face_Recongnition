@@ -22,6 +22,7 @@ from config import *
 # 检查 TFLite 转换工具
 try:
     import tensorflow as tf
+
     HAS_TF = True
 except ImportError:
     HAS_TF = False
@@ -29,6 +30,7 @@ except ImportError:
 # 检查 onnx2tf
 try:
     import onnx2tf
+
     HAS_ONNX2TF = True
 except ImportError:
     HAS_ONNX2TF = False
@@ -50,12 +52,13 @@ def convert_onnx_to_tflite_via_tf(onnx_path: str, tflite_path: str):
 
     # Step 1: ONNX → TF
     import onnx
+
     onnx_model = onnx.load(onnx_path)
     tf_rep = prepare(onnx_model)
 
     saved_model_dir = os.path.join(MODEL_DIR, "tf_saved_model")
     tf_rep.export_graph(saved_model_dir)
-    print(f"  ✓ TF SavedModel saved to: {saved_model_dir}")
+    print(f"  [OK] TF SavedModel saved to: {saved_model_dir}")
 
     # Step 2: TF → TFLite (INT8)
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
@@ -69,11 +72,11 @@ def convert_onnx_to_tflite_via_tf(onnx_path: str, tflite_path: str):
 
     tflite_model = converter.convert()
 
-    with open(tflite_path, 'wb') as f:
+    with open(tflite_path, "wb") as f:
         f.write(tflite_model)
 
     size_kb = os.path.getsize(tflite_path) / 1024
-    print(f"  ✓ TFLite model saved: {tflite_path} ({size_kb:.1f} KB)")
+    print(f"  [OK] TFLite model saved: {tflite_path} ({size_kb:.1f} KB)")
     return True
 
 
@@ -88,10 +91,12 @@ def convert_onnx_to_tflite_via_onnx2tf(onnx_path: str, tflite_path: str):
 
     cmd = [
         "onnx2tf",
-        "-i", onnx_path,
-        "-o", output_dir,
-        "-oiqt",               # INT8量化
-        "-osd",                 # 不检查输出shape (兼容部分算子)
+        "-i",
+        onnx_path,
+        "-o",
+        output_dir,
+        "-oiqt",  # INT8量化
+        "-osd",  # 不检查输出shape (兼容部分算子)
     ]
 
     print(f"  Running: {' '.join(cmd)}")
@@ -111,7 +116,7 @@ def convert_onnx_to_tflite_via_onnx2tf(onnx_path: str, tflite_path: str):
             os.remove(tflite_path)
         os.rename(output_tflite, tflite_path)
         size_kb = os.path.getsize(tflite_path) / 1024
-        print(f"  ✓ TFLite model saved: {tflite_path} ({size_kb:.1f} KB)")
+        print(f"  [OK] TFLite model saved: {tflite_path} ({size_kb:.1f} KB)")
         return True
     else:
         print(f"[Error] onnx2tf output not found: {output_tflite}")
@@ -142,15 +147,25 @@ def validate_tflite(tflite_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Export to TFLite")
-    parser.add_argument("--onnx", type=str,
-                        default=os.path.join(MODEL_DIR, "face_detector.onnx"),
-                        help="Path to ONNX model")
-    parser.add_argument("--output", type=str,
-                        default=os.path.join(MODEL_DIR, "face_detector.tflite"),
-                        help="Output TFLite path")
-    parser.add_argument("--method", type=str, default="auto",
-                        choices=["auto", "onnx2tf", "onnx-tf"],
-                        help="Conversion method")
+    parser.add_argument(
+        "--onnx",
+        type=str,
+        default=os.path.join(MODEL_DIR, "face_detector.onnx"),
+        help="Path to ONNX model",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=os.path.join(MODEL_DIR, "face_detector.tflite"),
+        help="Output TFLite path",
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="auto",
+        choices=["auto", "onnx2tf", "onnx-tf"],
+        help="Conversion method",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.onnx):

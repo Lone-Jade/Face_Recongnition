@@ -18,6 +18,7 @@ import os
 import sys
 import time
 import json
+import signal
 import argparse
 
 import torch
@@ -204,7 +205,7 @@ def validate_qat(model, dataloader, criterion, device):
             all_predictions.append(
                 (pred_boxes_list[b] * IMAGE_SIZE, pred_scores_list[b])
             )
-            all_groundtruths.append((boxes_list[b].clone(), labels_list[b]))
+            all_groundtruths.append((boxes_list[b].clone().to(device), labels_list[b]))
 
     map_results = compute_map(all_predictions, all_groundtruths)
     return loss_meter.avg, map_results["mAP@0.5"]
@@ -295,9 +296,20 @@ def main():
     )
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01)
 
+    # Ctrl+C 优雅退出
+    interrupted = False
+
+    def _signal_handler(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+        print(f"\n\n[Interrupt] Ctrl+C detected. Saving checkpoint before exit...")
+
+    signal.signal(signal.SIGINT, _signal_handler)
+
     # QAT 训练
     print(f"\n{'='*60}")
     print(f"QAT Fine-tuning: {args.epochs} epochs, LR={args.lr}")
+    print(f"  (Ctrl+C to pause — auto-saves checkpoint)")
     print(f"{'='*60}\n")
 
     best_qat_map = 0.0
@@ -344,6 +356,22 @@ def main():
                 qat_path,
             )
 
+        # Ctrl+C 中断: 保存断点后退出
+        if interrupted:
+            ckpt_path = os.path.join(MODEL_DIR, "checkpoint_qat_interrupt.pth")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "fp32_map": fp32_map,
+                    "qat_map": qat_val_map,
+                },
+                ckpt_path,
+            )
+            print(f"\n  [Interrupt] QAT checkpoint saved -> {ckpt_path}")
+            print(f"  Progress: {epoch}/{args.epochs} epochs, best QAT mAP={best_qat_map:.4f}")
+            sys.exit(0)
+
     # 转换为 INT8 模型
     print("\n[Convert] Converting QAT model to INT8...")
     model.eval()
@@ -370,7 +398,7 @@ def main():
     print(f"  INT8 model: {int8_path}")
     print(f"  QAT model:  {MODEL_DIR}/best_model_qat.pth")
     print(f"  Target:     mAP drop < 2%")
-    status = "✓ PASS" if abs(map_drop) < 0.02 else "✗ FAIL (need more QAT epochs)"
+    status = "PASS" if abs(map_drop) < 0.02 else "FAIL (need more QAT epochs)"
     print(f"  Status:     {status}")
     print(f"{'='*60}\n")
 

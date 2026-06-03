@@ -89,7 +89,7 @@ def export_basic_model(model: nn.Module, output_path: str, opset_version: int = 
         verbose=False,
     )
 
-    print(f"  ✓ Exported to: {output_path}")
+    print(f"  [OK] Exported to: {output_path}")
 
     # 验证 ONNX 模型
     if HAS_ONNX:
@@ -104,7 +104,7 @@ def _validate_onnx(onnx_path: str, dummy_input: torch.Tensor, model_ref: nn.Modu
     # 1. 结构验证
     onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
-    print("  ✓ ONNX model structure valid")
+    print("  [OK] ONNX model structure valid")
 
     # 2. 推理验证
     ort_session = ort.InferenceSession(onnx_path)
@@ -123,7 +123,7 @@ def _validate_onnx(onnx_path: str, dummy_input: torch.Tensor, model_ref: nn.Modu
     score_diff = np.abs(pt_scores.cpu().numpy() - ort_scores).max()
     box_diff = np.abs(pt_boxes.cpu().numpy() - ort_boxes).max()
 
-    print(f"  ✓ ONNX Runtime inference OK")
+    print(f"  [OK] ONNX Runtime inference OK")
     print(f"    score max diff: {score_diff:.6f}")
     print(f"    box max diff:   {box_diff:.6f}")
     print(f"    (differences < 1e-5 expected for FP32)")

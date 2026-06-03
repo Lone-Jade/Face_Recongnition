@@ -135,6 +135,7 @@ def decode_boxes(anchors: torch.Tensor, reg_preds: torch.Tensor,
 # ============================================================
 def batched_nms(boxes: torch.Tensor, scores: torch.Tensor,
                 iou_threshold: float = NMS_THRESHOLD,
+                score_threshold: Optional[float] = None,
                 max_output: int = MAX_DETECTIONS) -> List[torch.Tensor]:
     """
     批量 NMS 后处理。
@@ -143,30 +144,42 @@ def batched_nms(boxes: torch.Tensor, scores: torch.Tensor,
         boxes:  [B, N, 4] 边界框 [x1, y1, x2, y2] (归一化)
         scores: [B, N]    置信度
         iou_threshold:    IoU 阈值
+        score_threshold:  分数阈值 (None=使用全局 SCORE_THRESHOLD)
         max_output:       每张图最大保留框数
 
     Returns:
         List of [keep_N_i, 4], List of [keep_N_i]  (每张图结果)
     """
+    if score_threshold is None:
+        score_threshold = SCORE_THRESHOLD
+
     batch_size = boxes.shape[0]
     result_boxes = []
     result_scores = []
 
     for i in range(batch_size):
-        mask = scores[i] > SCORE_THRESHOLD
+        mask = scores[i] > score_threshold
         if mask.sum() == 0:
             result_boxes.append(torch.zeros((0, 4), device=boxes.device))
             result_scores.append(torch.zeros(0, device=boxes.device))
             continue
 
+        # Pre-filter: keep only top-200 scores for speed
+        masked_scores = scores[i][mask]
+        masked_boxes = boxes[i][mask]
+        if masked_scores.numel() > 100:
+            topk = masked_scores.topk(100).indices
+            masked_scores = masked_scores[topk]
+            masked_boxes = masked_boxes[topk]
+
         keep = torchvision_nms(
-            boxes[i][mask], scores[i][mask], iou_threshold)
+            masked_boxes, masked_scores, iou_threshold)
 
         if len(keep) > max_output:
             keep = keep[:max_output]
 
-        result_boxes.append(boxes[i][mask][keep])
-        result_scores.append(scores[i][mask][keep])
+        result_boxes.append(masked_boxes[keep])
+        result_scores.append(masked_scores[keep])
 
     return result_boxes, result_scores
 
@@ -312,20 +325,16 @@ class FaceDetector(nn.Module):
         cls_preds = torch.cat(cls_preds_list, dim=1)   # [B, N_total, 1]
         reg_preds = torch.cat(reg_preds_list, dim=1)   # [B, N_total, 4]
 
-        if not self.training:
-            # 推理模式: 解码 + NMS
-            scores = torch.sigmoid(cls_preds.squeeze(-1))  # [B, N]
-            boxes = decode_boxes(self.anchors, reg_preds)
-            return batched_nms(boxes, scores)
-        else:
-            return cls_preds, reg_preds
+        return cls_preds, reg_preds
 
-    def predict(self, image: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def predict(self, image: torch.Tensor,
+                score_threshold: float = 0.1) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        单张图片推理 (不需要 batch 维度)。
+        单张图片推理.
 
         Args:
             image: [C, H, W] 或 [1, C, H, W] 输入图像
+            score_threshold: 置信度阈值 (默认 0.1 以显示低分检测)
 
         Returns:
             boxes:  [K, 4]  xyxy 坐标 (像素)
@@ -335,10 +344,16 @@ class FaceDetector(nn.Module):
             image = image.unsqueeze(0)
         self.eval()
         with torch.no_grad():
-            boxes_list, scores_list = self.forward(image)
+            cls_preds, reg_preds = self.forward(image)
+        # sigmoid → decode → NMS (with lowered threshold)
+        scores = torch.sigmoid(cls_preds.squeeze(-1))  # [1, N]
+        pred_boxes = decode_boxes(self.anchors, reg_preds)
+        boxes_list, scores_list = batched_nms(
+            pred_boxes, scores,
+            iou_threshold=NMS_THRESHOLD,
+            score_threshold=score_threshold)
         boxes = boxes_list[0]
         scores = scores_list[0]
-        # 反归一化为像素坐标
         boxes = boxes * IMAGE_SIZE
         return boxes, scores
 
