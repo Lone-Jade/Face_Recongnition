@@ -62,3 +62,6 @@ face_detection/*.zip
 *.png
 *.jpg
 *.jpeg
+
+# =============== .ai ===============
+*.ai/

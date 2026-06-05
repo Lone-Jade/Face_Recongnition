@@ -827,7 +827,7 @@ AI_Prompt.md                    (本文档)
 2. 使用 STM32CubeMX + Cube.AI 插件加载人脸检测模型 (.tflite/.onnx)
 3. 在 Keil5 中集成 Cube.AI 生成的 Runtime 和网络代码
 4. 修改 main.c: 加入 AI 推理流程, 输入图片人脸检测, 结果绘制到 LCD
-5. 实现至少一种图片输入方式 (推荐 SD卡 或 USART 串口)
+5. 实现USART串口输入图片
 6. 在帧缓冲上绘制人脸边界框 (绿色矩形框)
 7. 编译通过, 生成可烧录的 .hex 文件
 
