@@ -125,7 +125,7 @@ LCD_DSI_CMD_mode_Single_Buffer/
 
 ### 2.5 核心配置参数
 
-#### 时钟树
+#### 时钟树（已修改，忽视本小节）
 ```
 HSE (25MHz) → PLL1 (/2, ×64, /2) → SYSCLK = 400MHz (CM7)
                                   → HCLK = SYSCLK/2 = 200MHz
