@@ -29,10 +29,23 @@
 #include "stm32h747i_discovery_bus.h"
 #include "stm32_lcd.h"
 
-#include "image_320x240_argb8888.h"
-#include "life_augmented_argb8888.h"
+#include "face_img_0.h"
+#include "face_img_1.h"
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
+
+/* AI - Cube.AI generated headers */
+#include "app_x-cube-ai.h"
+#include "bsp_ai.h"
+#include "network.h"
+#include "network_data.h"
+#include "ai_detection.h"
+
+/* External reference to AI network context (defined in app_x-cube-ai.c) */
+extern uint8_t network_context[STAI_NETWORK_CONTEXT_SIZE];
+extern stai_ptr stai_input[STAI_NETWORK_IN_NUM];
+extern stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -78,15 +91,30 @@ OTM8009A_Object_t *pObj;
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static int32_t pending_buffer = -1;  //Ö¸Ê¾Í¼Ïñ»º´æÖÐµÄÊý¾ÝÊÇ·ñÒÑ¾­±»Ê¹ÓÃ(ÏÔÊ¾)¹ý¡£0±íÊ¾ÉÐÎ´±»Ê¹ÓÃ£¬-1±íÊ¾ÒÑ¾­±»Ê¹ÓÃ¡£
+static int32_t pending_buffer = -1;  //Ö¸Ê¾Í¼ï¿½ñ»º´ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½(ï¿½ï¿½Ê¾)ï¿½ï¿½ï¿½ï¿½0ï¿½ï¿½Ê¾ï¿½ï¿½Î´ï¿½ï¿½Ê¹ï¿½Ã£ï¿½-1ï¿½ï¿½Ê¾ï¿½Ñ¾ï¿½ï¿½ï¿½Ê¹ï¿½Ã¡ï¿½
 static uint32_t ImageIndex = 0;
 static const uint32_t *Images[] =
     {
-        image_320x240_argb8888,  // images[0]
-        life_augmented_argb8888, // images[1]
+        face_img_0,  // WIDER Face: Parade
+        face_img_1,  // WIDER Face: Students
 };
 
 uint8_t My_String[30];
+
+/* AI Inference variables.
+   NOTE: See ai_detection.h for the full SDRAM buffer layout.
+   Key: AI activation buf2 at 0xD0800000 (set in app_x-cube-ai.c). */
+#define AI_IMG_BUF_ADDR     0xD0400000  /* Raw image buffer in SDRAM */
+
+static float *ai_input;                  /* Model input tensor (in activation buf) */
+
+static Detection detections[MAX_DETECTIONS];  /* Face detection results */
+static int num_detections = 0;
+
+/* Image receive via USART */
+static uint8_t *raw_img_buf = (uint8_t *)AI_IMG_BUF_ADDR;
+static volatile uint32_t rx_img_size = 0;
+static volatile uint8_t  rx_img_ready = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -240,11 +268,15 @@ int main(void)
   LCD_BriefDisplay();
     
   /*Draw first image */
-  CopyBuffer((uint32_t *)Images[ImageIndex++], (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240);  //240+320+240 =800, Í¼ÏñË®Æ½¾ÓÖÐ
+  CopyBuffer((uint32_t *)Images[ImageIndex++], (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240);  //240+320+240 =800, Í¼ï¿½ï¿½Ë®Æ½ï¿½ï¿½ï¿½ï¿½
   pending_buffer = 0;
   
   /*Refresh the LCD display*/
-  HAL_DSI_Refresh(&hlcd_dsi);  //¸üÐÂÍê³Éºó£¬²úÉúÖÐ¶Ï£¬½øÈëÖÐ¶Ï·þÎñ³ÌÐò¡£
+  HAL_DSI_Refresh(&hlcd_dsi);
+
+  /* AI - Initialize Cube.AI runtime and model (fills stai_input/stai_output) */
+  STM32CubeAI_Studio_AI_Init();
+  ai_input = (float *)stai_input[0];  /* Cache input tensor: 1x3x320x320 float32 */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -253,24 +285,38 @@ int main(void)
   {
     if (pending_buffer < 0)
     {
-      sprintf((char *)My_String, "Now Displaying Image %d", ImageIndex);
+      /* Step 1: Display current image on LCD */
+      uint32_t *src_img = (uint32_t *)Images[ImageIndex];
+      CopyBuffer(src_img, (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240);
+      sprintf((char *)My_String, "Image %d - Detecting...", ImageIndex);
       UTIL_LCD_DisplayStringAtLine(8, (uint8_t *)My_String);
 
-      CopyBuffer((uint32_t *)Images[ImageIndex++], (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240);
+      /* Step 2: Preprocess - convert ARGB8888 320x240 to float32 3x320x320 CHW */
+      ai_preprocess(src_img, 320, 240, ai_input, 320, 320);
 
-      if (ImageIndex >= 2)
-      {
-        ImageIndex = 0;
-      }
+      /* Step 3: Run AI inference */
+      aiRun();
+
+      /* Step 4: Post-process outputs to get face detections */
+      num_detections = ai_postprocess(stai_output, detections, MAX_DETECTIONS,
+                                       DET_THRESHOLD, NMS_THRESHOLD);
+
+      /* Step 5: Draw green bounding boxes on LCD frame buffer */
+      ai_draw_detections(detections, num_detections, (uint32_t *)LCD_FRAME_BUFFER,
+                         800, 240, 160, 320, 240);
+
+      /* Display detection count */
+      sprintf((char *)My_String, "Faces detected: %d", num_detections);
+      UTIL_LCD_DisplayStringAtLine(9, (uint8_t *)My_String);
+
       pending_buffer = 0;
-
       HAL_DSI_Refresh(&hlcd_dsi);
+
+      /* Cycle to next image */
+      ImageIndex = (ImageIndex + 1) % 2;
     }
-    /* Wait some time before switching to next image */
     HAL_Delay(2000);
-
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -665,11 +711,11 @@ static void LCD_BriefDisplay(void)
 {
   UTIL_LCD_SetFont(&Font24);  
   UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_BLUE); 
-  UTIL_LCD_FillRect(0, 0, 800, 112, UTIL_LCD_COLOR_BLUE);  //·½¿òÀï¹²6ÐÐ×Ö·û£¬ËùÐèÕ¼ÓÃÏñËØ£º24+24+16+16+16+16 = 112
+  UTIL_LCD_FillRect(0, 0, 800, 112, UTIL_LCD_COLOR_BLUE);  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¹²6ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ï¿½ï¿½ï¿½Ø£ï¿½24+24+16+16+16+16 = 112
   UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_WHITE);
-  UTIL_LCD_FillRect(0, 112, 800, 368, UTIL_LCD_COLOR_WHITE);  //112+368 = 480£¬LCDµÄ´¹Ö±ÏñËØ
+  UTIL_LCD_FillRect(0, 112, 800, 368, UTIL_LCD_COLOR_WHITE);  //112+368 = 480ï¿½ï¿½LCDï¿½Ä´ï¿½Ö±ï¿½ï¿½ï¿½ï¿½
   UTIL_LCD_SetBackColor(UTIL_LCD_COLOR_BLUE);
-  UTIL_LCD_DisplayStringAtLine(1, (uint8_t *)"     LCD_DSI_CmdMode_SingleBuffer Test");  //×Ö·û´ÓµÚ1ÐÐ¿ªÊ¼ÏÔÊ¾£¬
+  UTIL_LCD_DisplayStringAtLine(1, (uint8_t *)"            Face_Detection Homework");  //ï¿½Ö·ï¿½ï¿½Óµï¿½1ï¿½Ð¿ï¿½Ê¼ï¿½ï¿½Ê¾ï¿½ï¿½
   UTIL_LCD_SetFont(&Font16);
   UTIL_LCD_DisplayStringAtLine(4, (uint8_t *)"This example shows how to display images on LCD DSI using same buffer");
   UTIL_LCD_DisplayStringAtLine(5, (uint8_t *)"for display and for draw     ");
@@ -739,7 +785,7 @@ void DSI_IRQHandler(void)
 }
 
 /**
-  * @brief  Dummy ExitRun0Mode ¡ª not used in this project.
+  * @brief  Dummy ExitRun0Mode ï¿½ï¿½ not used in this project.
   *         CM4 wakeup is handled by HSEM semaphore in main().
   * @retval None
   */
