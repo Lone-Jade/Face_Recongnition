@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(D:/PythonConda/envs/pytorch_face_detection/python.exe PC_test/onnx_infer.py --image \"WIDERFace/WIDER_test/images/29--Students_Schoolkids/29_Students_Schoolkids_Students_Schoolkids_29_1.jpg\" --conf 0.6 --nms 0.45 --minbox 15)",
+      "Bash(D:/PythonConda/envs/pytorch_face_detection/python.exe PC_test/compare_validation.py --conf 0.6 --nms 0.45 --minbox 15)",
+      "Bash(python -c \"print\\('hello'\\)\")",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

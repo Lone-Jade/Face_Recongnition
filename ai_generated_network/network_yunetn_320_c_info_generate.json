@@ -7602,36 +7602,36 @@
   ],
   "environment": {
     "generated_model": {
-      "generated_time": "2026-06-05T15:48:46+0800",
+      "generated_time": "2026-06-07T17:03:49+0800",
       "model_files": [
         {
           "name": "network_data.h",
-          "signature": "0xd601d431ce3f9ff834093f6151a17dc7"
+          "signature": "0x351983bfc2ce0f69897ca36eeb590252"
         },
         {
           "name": "network_data.c",
-          "signature": "0xf669d18f5dcc70ddf66a426e778510e1"
+          "signature": "0x3bf7b87e3577bdef79396091baee1f3e"
         },
         {
           "name": "network.h",
-          "signature": "0x50f9cfb022f134ee4cdf5279382fd82a"
+          "signature": "0x0b385416a2be6c284378d4c36191b2f0"
         },
         {
           "name": "network.c",
-          "signature": "0xdcfe551b17798f6cb8cacc03be0434e6"
+          "signature": "0xae975b8abb3b28e8b2a1508aa03c7299"
         },
         {
           "name": "network_details.h",
-          "signature": "0xe9891ee9eec1ac2e6ac6a8519dca734f"
+          "signature": "0x59c23a59e6c7f04043b55cd1551ed0ec"
         }
       ],
       "name": "network"
     },
-    "network_signature": "0x40f181ec4c685b64",
+    "network_signature": "0x6251e05e2e5d57c8",
     "test_name": "",
     "tools": [
       {
-        "arguments": "generate --model D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Recongnition\\model_stm32\\yunetn_320.onnx --valinput D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection_STM32\\validation_dataset\\stedgeai_validation.npz --mode target --name network --verbosity 1 --c-api st-ai --optimization balanced --target stm32h7 --memory-pool D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Recongnition\\.ai\\mempools.json --workspace D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Recongnition\\.ai\\run\\generate-1\\st_ai_ws --output D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Recongnition\\.ai\\run\\generate-1\\st_ai_output",
+        "arguments": "generate --model D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection\\model_stm32\\yunetn_320.onnx --valinput D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection\\model_stm32\\stedgeai_validation.npz --mode target --optimization balanced --name network --verbosity 1 --c-api st-ai --target stm32h7 --memory-pool D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection\\.ai\\mempools.json --workspace D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection\\.ai\\run\\generate-1\\st_ai_ws --output D:\\EmbeddedSystem\\Practice\\BigHomework\\Face_Detection\\.ai\\run\\generate-1\\st_ai_output",
         "environment": [
           "STATS_TYPE=STM32CUBEAI-STUDIO"
         ],

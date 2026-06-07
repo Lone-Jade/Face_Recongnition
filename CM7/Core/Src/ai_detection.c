@@ -1,16 +1,21 @@
 /**
   ******************************************************************************
   * @file           : ai_detection.c
-  * @brief          : AI face detection - preprocessing, postprocessing, drawing
+  * @brief          : AI face detection — preprocessing, postprocessing, drawing
   ******************************************************************************
   */
 
 #include "ai_detection.h"
 #include <math.h>
+#include <stdio.h>
 
-/* YuNet anchor configuration for 320x320 input (stride only) */
+/* YuNet anchor configuration for 320×320 input (stride only) */
 const int yu_strides[3]    = YU_STRIDES;
 const int yu_grid_sizes[3] = YU_GRID_SIZES;
+
+/* Debug flag: set to 1 to enable verbose serial output, 0 to disable.
+   NOTE: renamed from AI_DEBUG to AI_DBG to avoid conflict with ST AI macro. */
+#define AI_DBG 1
 
 /* ========== Preprocessing ========== */
 
@@ -65,14 +70,22 @@ void ai_preprocess(uint32_t *src, int src_w, int src_h,
 
 /**
   * @brief  Decode YuNet 12-output tensors into face Detection structs.
-  *         Anchors are at grid CENTERS ((j+0.5)*stride, (i+0.5)*stride),
-  *         matching standard YuNet convention. Stride is used for both
-  *         anchor center positioning and box size decoding.
-  *         Applies score threshold (cls * obj) and IoU-based NMS.
-  * @retval Number of valid detections.
+  *         Anchors at grid CORNER (j*stride, i*stride) — matching
+  *         STM32 model zoo convention. Regression targets are offsets
+  *         from grid top-left corner in stride units.
+  *         Applies: score threshold, min-box-size filter, IoU NMS.
+  *
+  *         ST AI compiled output order:
+  *           outputs[0..2]  = cls_8, cls_16, cls_32   (sigmoid already applied)
+  *           outputs[3..5]  = obj_8, obj_16, obj_32   (sigmoid already applied)
+  *           outputs[6..8]  = bbox_8, bbox_16, bbox_32 (4×H×W CHW flat)
+  *           outputs[9..11] = kps_8, kps_16, kps_32   (10×H×W CHW flat, unused)
+  *
+  * @retval Number of valid detections after NMS.
   */
 int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
-                   float threshold, float nms_threshold)
+                   float threshold, float nms_threshold,
+                   float min_box_size)
 {
   int det_count = 0;
   int k, i, j, loc;
@@ -80,48 +93,85 @@ int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
   float stride;
   float *cls, *obj, *bbox;
 
+#if AI_DBG
+  printf("\r\n=== AI Postprocess ===\r\n");
+  printf("threshold=%.3f nms=%.3f minbox=%.1f max_dets=%d\r\n",
+         threshold, nms_threshold, min_box_size, max_dets);
+  printf("Output tensor pointers:\r\n");
+  for (k = 0; k < 12; k++) {
+    printf("  out[%d]=%p\r\n", k, (void*)outputs[k]);
+  }
+#endif
+
   for (k = 0; k < NUM_STRIDES; k++)
   {
     stride = (float)yu_strides[k];
     gs     = yu_grid_sizes[k];
 
-    /* cls=k, obj=k+3, bbox=k+6
-       ST AI compiled output order:
-         outputs[0..2]  = cls_8, cls_16, cls_32   (sigmoid applied by model)
-         outputs[3..5]  = obj_8, obj_16, obj_32   (sigmoid applied by model)
-         outputs[6..8]  = bbox_8, bbox_16, bbox_32 (4 x H x W in CHW layout)
-         outputs[9..11] = kps_8, kps_16, kps_32   (10 x H x W, unused here)
-    */
     cls  = (float *)outputs[k];
     obj  = (float *)outputs[k + 3];
     bbox = (float *)outputs[k + 6];
 
+#if AI_DBG
+    /* Sample first 5 cls/obj values to check if model outputs look sane */
+    printf("Stride %d (gs=%d): cls[0..4]=", (int)stride, gs);
+    for (i = 0; i < 5 && i < gs*gs; i++)
+      printf("%.4f ", cls[i]);
+    printf(" obj[0..4]=");
+    for (i = 0; i < 5 && i < gs*gs; i++)
+      printf("%.4f ", obj[i]);
+    printf("\r\n");
+    /* Sample bbox[0..3] for loc=0 using BOTH indexing schemes */
+    printf("  bbox[0,0] CHW: dx=%.4f dy=%.4f dw=%.4f dh=%.4f\r\n",
+           bbox[0*gs*gs+0], bbox[1*gs*gs+0],
+           bbox[2*gs*gs+0], bbox[3*gs*gs+0]);
+    printf("  bbox[0,0] IL:  dx=%.4f dy=%.4f dw=%.4f dh=%.4f\r\n",
+           bbox[0*4+0], bbox[0*4+1], bbox[0*4+2], bbox[0*4+3]);
+#endif
+
+    int stride_candidates = 0;
+    float top_scores[5] = {0};
     for (i = 0; i < gs; i++)
     {
       for (j = 0; j < gs; j++)
       {
         loc = i * gs + j;
 
-        /* Score = cls * obj (both already sigmoid-ed by model) */
         float score = cls[loc] * obj[loc];
         if (score < threshold) continue;
 
-        /* Bbox regression (CHW layout: c0=dx, c1=dy, c2=dw, c3=dh) */
-        float dx = bbox[0 * gs * gs + loc];
-        float dy = bbox[1 * gs * gs + loc];
-        float dw = bbox[2 * gs * gs + loc];
-        float dh = bbox[3 * gs * gs + loc];
+        /* ST AI outputs bbox in interleaved format (N×4), NOT CHW (4×N).
+           Verified by USART debug: IL indexing produces correct 74×140 box
+           matching PC ONNX, while CHW produces wrong 23×24 box. */
+        float dx = bbox[loc * 4 + 0];
+        float dy = bbox[loc * 4 + 1];
+        float dw = bbox[loc * 4 + 2];
+        float dh = bbox[loc * 4 + 3];
 
-        /* Decode: anchor at grid CENTER ((j+0.5)*stride, (i+0.5)*stride).
-           Standard YuNet convention: regression targets are relative
-           to anchor center, scaled by stride.
-           bbox channels (CHW): c0=dx, c1=dy, c2=dw, c3=dh */
-        float cx = ((float)j + 0.5f + dx) * stride;
-        float cy = ((float)i + 0.5f + dy) * stride;
+        /* Anchor at grid CORNER: cx = (j + dx) * stride */
+        float cx = ((float)j + dx) * stride;
+        float cy = ((float)i + dy) * stride;
         float bw = expf(dw) * stride;
         float bh = expf(dh) * stride;
 
-        /* Convert from [cx, cy, w, h] to [x1, y1, x2, y2] */
+        /* Filter INT8 quantization noise: reject tiny boxes (< min_box_size pixels) */
+        if (bw < min_box_size || bh < min_box_size) continue;
+
+        stride_candidates++;
+
+        /* Track top scores for debug */
+        if (score > top_scores[4]) {
+          top_scores[4] = score;
+          int s;
+          for (s = 3; s >= 0; s--) {
+            if (top_scores[s] < top_scores[s+1]) {
+              float tmp = top_scores[s];
+              top_scores[s] = top_scores[s+1];
+              top_scores[s+1] = tmp;
+            }
+          }
+        }
+
         float x1 = cx - bw * 0.5f;
         float y1 = cy - bh * 0.5f;
         float x2 = cx + bw * 0.5f;
@@ -146,12 +196,86 @@ int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
         }
       }
     }
+
+#if AI_DBG
+    printf("  Stride %d raw candidates: %d (threshold=%.3f)\r\n",
+           (int)stride, stride_candidates, threshold);
+    printf("  Top-5 scores: %.4f %.4f %.4f %.4f %.4f\r\n",
+           top_scores[0], top_scores[1], top_scores[2],
+           top_scores[3], top_scores[4]);
+    /* Print bbox at the best candidate's position using both indexing schemes */
+    if (stride_candidates > 0 && top_scores[0] > 0.0f) {
+      /* Find the grid position of the highest-scoring candidate */
+      int best_loc = -1, best_i = -1, best_j = -1;
+      float best_score = 0.0f;
+      for (i = 0; i < gs; i++) {
+        for (j = 0; j < gs; j++) {
+          loc = i * gs + j;
+          float s = cls[loc] * obj[loc];
+          if (s > best_score) { best_score = s; best_loc = loc; best_i = i; best_j = j; }
+        }
+      }
+      if (best_loc >= 0) {
+        printf("  Best candidate grid=(%d,%d) loc=%d score=%.4f\r\n",
+               best_i, best_j, best_loc, best_score);
+        printf("  bbox CHW[loc=%d]: dx=%.4f dy=%.4f dw=%.4f dh=%.4f\r\n",
+               best_loc,
+               bbox[0*gs*gs+best_loc], bbox[1*gs*gs+best_loc],
+               bbox[2*gs*gs+best_loc], bbox[3*gs*gs+best_loc]);
+        printf("  bbox IL [loc=%d]: dx=%.4f dy=%.4f dw=%.4f dh=%.4f\r\n",
+               best_loc,
+               bbox[best_loc*4+0], bbox[best_loc*4+1],
+               bbox[best_loc*4+2], bbox[best_loc*4+3]);
+        /* Show what box each would produce */
+        float dcx, dcy, dbw, dbh;
+        /* CHW decode */
+        dcx = ((float)best_j + bbox[0*gs*gs+best_loc]) * stride;
+        dcy = ((float)best_i + bbox[1*gs*gs+best_loc]) * stride;
+        dbw = expf(bbox[2*gs*gs+best_loc]) * stride;
+        dbh = expf(bbox[3*gs*gs+best_loc]) * stride;
+        printf("  -> CHW box: (%.0f,%.0f)-(%.0f,%.0f) %.0fx%.0f\r\n",
+               dcx-dbw*0.5f, dcy-dbh*0.5f, dcx+dbw*0.5f, dcy+dbh*0.5f, dbw, dbh);
+        /* Interleaved decode */
+        dcx = ((float)best_j + bbox[best_loc*4+0]) * stride;
+        dcy = ((float)best_i + bbox[best_loc*4+1]) * stride;
+        dbw = expf(bbox[best_loc*4+2]) * stride;
+        dbh = expf(bbox[best_loc*4+3]) * stride;
+        printf("  -> IL  box: (%.0f,%.0f)-(%.0f,%.0f) %.0fx%.0f\r\n",
+               dcx-dbw*0.5f, dcy-dbh*0.5f, dcx+dbw*0.5f, dcy+dbh*0.5f, dbw, dbh);
+      }
+    }
+#endif
   }
 
-  /* ---------- Sort by score (descending, bubble sort) ---------- */
+#if AI_DBG
+  printf("Total raw candidates (all strides): %d\r\n", det_count);
+#endif
+
+  /* ---------- Sort by score (descending) ---------- */
   if (det_count > 1)
   {
     int a, b;
+
+#if AI_DBG
+    {
+      int show_n = det_count < 5 ? det_count : 5;
+      int ta, tb, ti;
+      /* Simple partial sort on the first 'show_n' elements to find top scores */
+      for (ta = 0; ta < show_n - 1; ta++)
+        for (tb = ta + 1; tb < show_n; tb++)
+          if (dets[tb].score > dets[ta].score) {
+            Detection t = dets[ta]; dets[ta] = dets[tb]; dets[tb] = t;
+          }
+      printf("Sorting %d raw detections...\r\n", det_count);
+      printf("Top-5 raw detections (pre-NMS):\r\n");
+      for (ti = 0; ti < show_n; ti++)
+        printf("  #%d: score=%.4f box=(%.1f,%.1f,%.1f,%.1f) size=%.0fx%.0f\r\n",
+               ti, dets[ti].score,
+               dets[ti].x1, dets[ti].y1, dets[ti].x2, dets[ti].y2,
+               dets[ti].x2-dets[ti].x1, dets[ti].y2-dets[ti].y1);
+    }
+#endif
+
     for (a = 0; a < det_count - 1; a++)
       for (b = a + 1; b < det_count; b++)
         if (dets[b].score > dets[a].score) {
@@ -159,6 +283,9 @@ int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
         }
 
     /* ---------- NMS ---------- */
+#if AI_DBG
+    int nms_suppressed = 0;
+#endif
     for (a = 0; a < det_count; a++)
     {
       if (dets[a].score <= 0.0f) continue;
@@ -176,19 +303,50 @@ int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
         float inter = iw * ih;
         float area_b = (dets[b].x2 - dets[b].x1) * (dets[b].y2 - dets[b].y1);
         float iou = inter / (area_a + area_b - inter);
-        if (iou > nms_threshold) dets[b].score = -1.0f;
+        /* Containment filter: if >75% of the smaller box is overlapped,
+           suppress regardless of IoU. Catches small boxes inside large ones. */
+        float smaller_area = (area_a < area_b) ? area_a : area_b;
+        if (iou > nms_threshold || inter > 0.75f * smaller_area) {
+          dets[b].score = -1.0f;
+#if AI_DBG
+          nms_suppressed++;
+#endif
+        }
       }
     }
 
-    /* ---------- Compact ---------- */
-    int wi = 0;
+/* ---------- Compact ---------- */
+    { int wi = 0;
     for (a = 0; a < det_count; a++)
       if (dets[a].score > 0.0f) {
         if (wi != a) dets[wi] = dets[a];
         wi++;
       }
+
+#if AI_DBG
+    printf("NMS: suppressed %d, remaining %d\r\n", nms_suppressed, wi);
+#endif
     det_count = wi;
+    }
   }
+#if AI_DBG
+  else {
+    printf("Only %d raw detections (no sorting/NMS needed)\r\n", det_count);
+  }
+#endif
+
+#if AI_DBG
+  {
+    int di;
+    printf("=== Final detections: %d ===\r\n", det_count);
+    for (di = 0; di < det_count; di++) {
+      printf("  #%d: score=%.4f box=(%.1f,%.1f)-(%.1f,%.1f) w=%.0f h=%.0f\r\n",
+             di, dets[di].score,
+             dets[di].x1, dets[di].y1, dets[di].x2, dets[di].y2,
+             dets[di].x2-dets[di].x1, dets[di].y2-dets[di].y1);
+    }
+  }
+#endif
 
   return det_count;
 }
@@ -207,7 +365,7 @@ void ai_draw_detections(Detection *dets, int ndet, uint32_t *fb,
                         int img_w, int img_h)
 {
   int d, t, x, y;
-  float scale_x = (float)img_w / 320.0f;  /* Model input was 320x320 */
+  float scale_x = (float)img_w / 320.0f;  /* Model input was 320×320 */
   float scale_y = (float)img_h / 320.0f;
 
   for (d = 0; d < ndet; d++)

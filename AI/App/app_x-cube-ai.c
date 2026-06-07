@@ -50,18 +50,6 @@
 #include "app_x-cube-ai.h"
 #include "bsp_ai.h"
 #include "stai.h"
-
-
-
-/* USER CODE BEGIN includes */
-
-/* USER CODE END includes */
-
-/* IO buffers ----------------------------------------------------------------*/
-
-
-/* Input defs ----------------------------------------------------------------*/
-#include "aiTestUtility.h"
 /**
 STAI_ALIGNED(32) static uint8_t data_in_1[STAI_NETWORK_IN_1_SIZE_BYTES];
 
@@ -129,10 +117,10 @@ static uint8_t DTCMRAM[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
 
 
 /* Global c-array to handle the activations buffer */
-/* Activation buf1 in DTCM (59564B), buf2 in SDRAM (2.45MB).
-   MUST NOT overlap with frame buffer (0xD0000000, ~1.5MB),
-   raw img buf (0xD0400000), or camera buf (0xD0600000). */
-stai_ptr data_activations[] = { DTCMRAM,(ai_handle)0xd0800000 };
+/* Activation buf1: DTCM (59KB).  Activation buf2: SDRAM @ 0xD0800000 (2.34MB).
+   SDRAM layout: LCD_FB@0xD0000000, IMG@0xD0400000, CAM@0xD0600000, AI_ACT2@0xD0800000.
+   See CM7/Core/Inc/ai_detection.h for full map. */
+stai_ptr data_activations[] = { DTCMRAM, (ai_handle)0xd0800000 };
 
 STAI_ALIGNED(32) static uint8_t states_1[4];
 stai_ptr data_states[] = {
@@ -144,8 +132,9 @@ stai_ptr data_states[] = {
 
 /* Entry points --------------------------------------------------------------*/
 
-/* Array of pointer to manage the model's input/output tensors */
-static stai_size in_length, out_length;
+/* Array of pointer to manage the model's input/output tensors.
+   NOT static — main.c references them via extern. */
+stai_size in_length, out_length;
 stai_ptr stai_input[STAI_NETWORK_IN_NUM];
 stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
 
@@ -155,37 +144,26 @@ stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
  */
 int aiInit(void) {
   stai_return_code ret_code;
-  
+
   /* 1: Initialize runtime library */
   ret_code = stai_runtime_init();
-  
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
+
   /* 2: Initialize network model context */
   ret_code = user_stai_network_init(network_context);
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
+
   /* 3: Set network activations buffers */
   ret_code = stai_network_set_activations(network_context, data_activations, STAI_NETWORK_ACTIVATIONS_NUM);
-  
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
 
-  /* 4: Update the AI input/output buffers */
-  /** Set network input/output buffers 
-    * If the model uses no-inputs-allocation or no-outputs-allocation, the addresses of the input/output buffers
-    * must be set before running the inference.
-    * See https://stedgeai-dc.com/assets/embedded-docs/embedded_client_stai_api.html#ref_api_set_io
-    * for more details
-    */
-
-  // current model uses allocate-inputs, use this part to overwrite the addresses of the input buffers
-  /**
-  ret_code = stai_network_set_inputs(network_context, data_ins, STAI_NETWORK_IN_NUM);
-   */
-  // current model uses allocate-outputs, use this part to overwrite the addresses of the output buffers
-  /** 
-  ret_code = stai_network_set_outputs(network_context, data_outs, STAI_NETWORK_OUT_NUM);
-   */
-
+  /* 4: Get AI input/output buffer pointers (allocated internally or set above) */
   ret_code = stai_network_get_inputs(network_context, stai_input, &in_length);
-  
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
+
   ret_code = stai_network_get_outputs(network_context, stai_output, &out_length);
-  
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
+
   return 0;
 }
 
@@ -194,52 +172,27 @@ int aiDeinit(void) {
 
   /* 1: Deinitialize network model context */
   ret_code = stai_network_deinit(network_context);
-  
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
+
   /* 2: Deinitialize runtime library */
   ret_code = stai_runtime_deinit();
+  if (ret_code != STAI_SUCCESS) return (int)ret_code;
 
   return 0;
 }
 
-/* 
- * Run inference
+/*
+ * Run inference (synchronous, blocking). Caller must fill stai_input[0]
+ * before calling, and read stai_output[] after this returns.
  */
-stai_return_code aiRun() {
+stai_return_code aiRun(void) {
   stai_return_code ret_code;
-
-  /** Profiling code to calculate the inference time of the model. You can remove it if not needed */
-  static uint32_t inference_nb = 0;
-  static uint32_t total_cycles = 0;
-  uint32_t start_tick, end_tick, end_dwt = 0;
-  struct dwtTime t;
-  cyclesCounterInit();
-
-  LC_PRINT("---- Inference number %" PRIu32 " ----\r\n", inference_nb);
-  LC_PRINT("Results for network \"%s\"\r\nRunning...\r\n", STAI_NETWORK_MODEL_NAME);
-  cyclesCounterStart();
-  start_tick = HAL_GetTick();
-
 
   /* Perform the inference */
   ret_code = stai_network_run(network_context, STAI_MODE_SYNC);
   if (ret_code != STAI_SUCCESS) {
       ret_code = stai_network_get_error(network_context);
-      LC_PRINT("Inference failed with error code %s\r\n", stai_get_return_code_name(ret_code));
-  };
-  /** End of inference */
-  
-  /** Continue profiling */
-  end_dwt = cyclesCounterEnd();
-  total_cycles += end_dwt;
-  end_tick = HAL_GetTick();
-  dwtCyclesToTime(end_dwt, &t);
-
-  LC_PRINT(" duration DWT    : %d.%03d ms\r\n", t.s * 1000 + t.ms, t.us);
-  LC_PRINT(" duration SysTick: %" PRIu32" ms\r\n", end_tick - start_tick);
-  LC_PRINT(" CPU cycles      : %" PRIu32 "\r\n", end_dwt);
-  LC_PRINT(" CPU cycles (avg): %" PRIu32 "\r\n", total_cycles / ++inference_nb);
-  LC_PRINT(" Sleep for 5s...\r\n");
-  HAL_Delay(5000);
+  }
 
   return ret_code;
 }
@@ -299,8 +252,7 @@ void main_loop() {
 
 void STM32CubeAI_Studio_AI_Init(void)
 {
-    MX_UARTx_Init();
-    aiInit();  
+    aiInit();
     /* USER CODE BEGIN init */
     /* USER CODE END init */
 }

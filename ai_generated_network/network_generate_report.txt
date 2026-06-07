@@ -1,44 +1,44 @@
 ST Edge AI Core v4.0.1-20581 7ed50de05
-Created date          : 2026-06-05 15:48:54
-Parameters            : generate --model D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\model_stm32\yunetn_320.onnx --valinput D:\EmbeddedSystem\Practice\BigHomework\Face_Detection_STM32\validation_dataset\stedgeai_validation.npz --mode target --name network --verbosity 1 --c-api st-ai --optimization balanced --target stm32h7 --memory-pool D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\mempools.json --workspace D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_ws --output D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output
+Created date          : 2026-06-07 17:03:54
+Parameters            : generate --model D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\model_stm32\yunetn_320.onnx --valinput D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\model_stm32\stedgeai_validation.npz --mode target --optimization balanced --name network --verbosity 1 --c-api st-ai --target stm32h7 --memory-pool D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\mempools.json --workspace D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_ws --output D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output
 
 Exec/report summary (generate)
---------------------------------------------------------------------------------------------------------------------------------
-model file         :   D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\model_stm32\yunetn_320.onnx                     
-type               :   onnx                                                                                                     
-c_name             :   network                                                                                                  
-compression        :   lossless                                                                                                 
-options            :   allocate-inputs, allocate-outputs, multi-heaps, use-lite-runtime, use-st-ai                              
-optimization       :   balanced                                                                                                 
-target/series      :   stm32h7                                                                                                  
-memory pool        :   D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\mempools.json                               
-workspace dir      :   D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_ws                     
-output dir         :   D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output                 
-vinput files       :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection_STM32\validation_dataset\stedgeai_validation.npz   
-model_fmt          :   float                                                                                                    
-model_name         :   yunetn_320                                                                                               
-model_hash         :   0x28cbcb2715420c9ce9d9e3b61204a6be                                                                       
-params #           :   73,840 items (288.44 KiB)                                                                                
---------------------------------------------------------------------------------------------------------------------------------
-input 1/1          :   'input', f32(1x3x320x320), 1200.00 KBytes, activations                                                   
-output 1/12        :   'cls_8', f32(1x1x1600), 6.25 KBytes, activations                                                         
-output 2/12        :   'cls_16', f32(1x1x400), 1.56 KBytes, activations                                                         
-output 3/12        :   'cls_32', f32(1x1x100), 400 Bytes, activations                                                           
-output 4/12        :   'obj_8', f32(1x1x1600), 6.25 KBytes, activations                                                         
-output 5/12        :   'obj_16', f32(1x1x400), 1.56 KBytes, activations                                                         
-output 6/12        :   'obj_32', f32(1x1x100), 400 Bytes, activations                                                           
-output 7/12        :   'node_303', f32(1x40x40x4), 25.00 KBytes, activations                                                    
-output 8/12        :   'node_305', f32(1x20x20x4), 6.25 KBytes, activations                                                     
-output 9/12        :   'node_307', f32(1x10x10x4), 1.56 KBytes, activations                                                     
-output 10/12       :   'node_315', f32(1x40x40x10), 62.50 KBytes, activations                                                   
-output 11/12       :   'node_317', f32(1x20x20x10), 15.62 KBytes, activations                                                   
-output 12/12       :   'node_319', f32(1x10x10x10), 3.91 KBytes, activations                                                    
-outputs (total)    :   131.25 KBytes                                                                                            
-macc               :   139,559,296                                                                                              
-weights (ro)       :   295,360 B (288.44 KiB) (1 segment)                                                                       
-activations (rw)   :   2,517,164 B (2.40 MiB) (2 segments) *                                                                    
-ram (total)        :   2,517,164 B (2.40 MiB) = 2,517,164 + 0 + 0                                                               
---------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+model file         :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\model_stm32\yunetn_320.onnx           
+type               :   onnx                                                                                        
+c_name             :   network                                                                                     
+compression        :   lossless                                                                                    
+options            :   allocate-inputs, allocate-outputs, multi-heaps, use-lite-runtime, use-st-ai                 
+optimization       :   balanced                                                                                    
+target/series      :   stm32h7                                                                                     
+memory pool        :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\mempools.json                     
+workspace dir      :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_ws           
+output dir         :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output       
+vinput files       :   D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\model_stm32\stedgeai_validation.npz   
+model_fmt          :   float                                                                                       
+model_name         :   yunetn_320                                                                                  
+model_hash         :   0x28cbcb2715420c9ce9d9e3b61204a6be                                                          
+params #           :   73,840 items (288.44 KiB)                                                                   
+-------------------------------------------------------------------------------------------------------------------
+input 1/1          :   'input', f32(1x3x320x320), 1200.00 KBytes, activations                                      
+output 1/12        :   'cls_8', f32(1x1x1600), 6.25 KBytes, activations                                            
+output 2/12        :   'cls_16', f32(1x1x400), 1.56 KBytes, activations                                            
+output 3/12        :   'cls_32', f32(1x1x100), 400 Bytes, activations                                              
+output 4/12        :   'obj_8', f32(1x1x1600), 6.25 KBytes, activations                                            
+output 5/12        :   'obj_16', f32(1x1x400), 1.56 KBytes, activations                                            
+output 6/12        :   'obj_32', f32(1x1x100), 400 Bytes, activations                                              
+output 7/12        :   'node_303', f32(1x40x40x4), 25.00 KBytes, activations                                       
+output 8/12        :   'node_305', f32(1x20x20x4), 6.25 KBytes, activations                                        
+output 9/12        :   'node_307', f32(1x10x10x4), 1.56 KBytes, activations                                        
+output 10/12       :   'node_315', f32(1x40x40x10), 62.50 KBytes, activations                                      
+output 11/12       :   'node_317', f32(1x20x20x10), 15.62 KBytes, activations                                      
+output 12/12       :   'node_319', f32(1x10x10x10), 3.91 KBytes, activations                                       
+outputs (total)    :   131.25 KBytes                                                                               
+macc               :   139,559,296                                                                                 
+weights (ro)       :   295,360 B (288.44 KiB) (1 segment)                                                          
+activations (rw)   :   2,517,164 B (2.40 MiB) (2 segments) *                                                       
+ram (total)        :   2,517,164 B (2.40 MiB) = 2,517,164 + 0 + 0                                                  
+-------------------------------------------------------------------------------------------------------------------
 (*) 'input'/'output' buffers are allocated in the activations buffer
  
  Memory-pools summary (activations/ domain)
@@ -1235,9 +1235,9 @@ macc=139,559,296 weights=295,360 act=2,517,164 ram_io=0
 
 
 Generated files (5)
------------------------------------------------------------------------------------------------------------- 
-D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output\network_data.h      
-D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output\network_data.c      
-D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output\network.h           
-D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output\network.c           
-D:\EmbeddedSystem\Practice\BigHomework\Face_Recongnition\.ai\run\generate-1\st_ai_output\network_details.h   
+--------------------------------------------------------------------------------------------------------- 
+D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output\network_data.h      
+D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output\network_data.c      
+D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output\network.h           
+D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output\network.c           
+D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\.ai\run\generate-1\st_ai_output\network_details.h   
