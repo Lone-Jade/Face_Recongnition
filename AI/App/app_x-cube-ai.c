@@ -129,7 +129,10 @@ static uint8_t DTCMRAM[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
 
 
 /* Global c-array to handle the activations buffer */
-stai_ptr data_activations[] = { DTCMRAM,(ai_handle)0xd0000000 };
+/* Activation buf1 in DTCM (59564B), buf2 in SDRAM (2.45MB).
+   MUST NOT overlap with frame buffer (0xD0000000, ~1.5MB),
+   raw img buf (0xD0400000), or camera buf (0xD0600000). */
+stai_ptr data_activations[] = { DTCMRAM,(ai_handle)0xd0800000 };
 
 STAI_ALIGNED(32) static uint8_t states_1[4];
 stai_ptr data_states[] = {
@@ -143,8 +146,8 @@ stai_ptr data_states[] = {
 
 /* Array of pointer to manage the model's input/output tensors */
 static stai_size in_length, out_length;
-static stai_ptr stai_input[STAI_NETWORK_IN_NUM];
-static stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
+stai_ptr stai_input[STAI_NETWORK_IN_NUM];
+stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
 
 
 /* 
