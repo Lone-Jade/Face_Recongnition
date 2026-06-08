@@ -2,6 +2,10 @@
 
 **Face Detection System on STM32H747I-DISCO**
 
+> **课程作业声明 / Coursework Disclaimer**  
+> 本项目为同济大学《嵌入式系统》课程大作业。  
+> This project is a coursework assignment for the *Embedded Systems* course at **Tongji University**.
+
 [中文](#chinese) | [English](#english)
 
 ---
