@@ -5,8 +5,8 @@
   "isGenerated": true,
   "name": "LCD_DSI_CMD_mode_Single_Buffer",
   "createdAt": 1780574313951,
-  "lastModified": 1780634076080,
-  "lastAccessed": 1780634076079,
+  "lastModified": 1780891764567,
+  "lastAccessed": 1780891764567,
   "type": "MxProject",
   "mcu": "STM32H747XIH6",
   "board": "STM32H747I-DISCO",
@@ -17,5 +17,6 @@
     "txpin": "PA9",
     "usart": "USART1",
     "baudrate": 115200
-  }
+  },
+  "hidden": true
 }

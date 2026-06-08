@@ -15,11 +15,11 @@
 
 ### 项目简介
 
-本项目在**STM32H747I-DISCO**开发板上实现了基于深度学习的人脸检测系统。系统通过USART串口接收PC端发送的图像，利用STM32 Cube.AI运行时库在Cortex-M7上运行**YuNet-320**轻量级人脸检测模型，并在OTM8009A LCD面板上实时显示带检测框标注的结果。
+本项目在**STM32H747I-DISCO**开发板上实现了基于深度学习的人脸检测系统。系统通过USART串口接收PC端发送的图像，利用STM32 Cube AI运行时库在Cortex-M7上运行**YuNet-320**轻量级人脸检测模型，并在OTM8009A LCD面板上实时显示带检测框标注的结果。
 
 **核心功能：**
 - MIPI DSI Command Mode LCD显示（800×480, DMA2D硬件加速）
-- Cube.AI部署YuNet-320人脸检测模型（Float32, ~140M MACCs）
+- Cube AI部署YuNet-320人脸检测模型（Float32, ~140M MACCs）
 - USART二进制协议接收320×240图像（支持单张和多张批处理）
 - 检测后处理（盒子解码 + NMS去重）+ 绿色边框绘制
 - 双核架构：CM7主控+AI推理，CM4待机辅助
@@ -37,8 +37,8 @@ Face_Detection/
 │       ├── ai_detection.h # 检测参数、SDRAM布局、接口声明
 │       └── stm32h7xx_hal_conf.h
 ├── CM4/Core/              # CM4 辅助核源码（待机）
-├── AI/App/                # Cube.AI 运行时（app_x-cube-ai.c/h）
-├── ai_generated_network/  # Cube.AI 生成的网络代码（network.c/h + data）
+├── AI/App/                # Cube AI 运行时（app_x-cube-ai.c/h）
+├── ai_generated_network/  # Cube AI 生成的网络代码（network.c/h + data）
 ├── PC_side/
 │   └── send_image.py      # PC端图像发送脚本
 ├── MDK-ARM/               # Keil MDK 工程文件
@@ -59,7 +59,7 @@ Face_Detection/
 | 外存 | IS42S32800J SDRAM 32MB @ 0xD0000000 |
 | 通信 | USART1 (PA9/PA10, 115200bps) |
 | IDE | Keil MDK-ARM uVision 5, ARMCC V5.06 |
-| AI工具链 | STM32 Cube.AI / X-CUBE-AI (ST.AI Embedded Client API) |
+| AI工具链 | STM32 Cube AI Studio |
 | PC环境 | Python 3.8+ / pyserial / Pillow |
 | 设备包 | Keil.STM32H7xx_DFP.2.6.0 |
 
@@ -76,12 +76,35 @@ Face_Detection/
   - 计算量：~140M MACCs
   - 激活内存：~2.46MB（位于SDRAM 0xD0800000）
 
-模型通过**STM32 Cube.AI Studio**（或X-CUBE-AI CLI）编译为嵌入式C代码，生成在`ai_generated_network/`和`AI/App/`目录下。如需重新生成：
+模型通过**STM32 Cube AI Studio**（或X-CUBE-AI CLI）编译为嵌入式C代码，生成在`ai_generated_network/`和`AI/App/`目录下。如需重新生成：
 
 ```bash
-# STM32 Cube.AI CLI 方式
+# STM32 Cube AI CLI 方式
 stm32ai generate -m yunetn_320.onnx -o ai_generated_network/ --target stm32h7
 ```
+
+`model_stm32/py/` 目录包含四个 Python 脚本，用于模型验证和 Cube AI Studio 部署准备：
+
+| 文件 | 作用 |
+|------|------|
+| `test_yunet.py` | 独立测试脚本，不依赖 Model Zoo。功能包括 ONNX 模型架构分析（参数量/算子/STM32 兼容性）、单张/批量图片推理、YuNet 后处理解码（anchor + NMS）、实时摄像头测试 |
+| `generate_validation_dataset.py` | 从 WIDER Face 数据集选取图片，通过 ONNX Runtime 推理生成参考输出，输出 `validation_data.npz`（键名 `inputs`/`output_00_*`）、CSV 清单、预处理预览图。支持 diverse/easy/hard/crowd 四种样本选取策略 |
+| `fix_validation_format.py` | **生成 `stedgeai_validation.npz` 的脚本。** 复用 `generate_validation_dataset.py` 的预处理函数，将输入输出扁平化为 `(N, -1)` 格式，使用 ST Edge AI 标准键名 `m_inputs_1` + `m_outputs_1`~`m_outputs_12`（索引从 1 开始） |
+
+**`stedgeai_validation.npz` 文件说明：**
+
+`model_stm32/stedgeai_validation.npz` 由 `fix_validation_format.py` 生成，包含 10 个 WIDER Face 验证集样本。该文件用于 **STM32 Cube AI Studio**（原 ST Edge AI Studio）的以下场景：
+
+- **模型验证（Validate）**：在 Cube AI Studio 中加载此文件作为验证数据集，对比 ONNX Runtime 参考输出与 Cube AI 生成的 C 模型输出，确保量化/编译后的模型精度无损
+- **C 语言模型生成（Generate）**：验证通过后，Cube AI Studio 从 ONNX 模型生成嵌入式 C 代码（`network.c/h` + `network_data.c/h`），部署到 `ai_generated_network/` 目录
+
+```bash
+# CLI 验证命令（等效于 Cube AI Studio 图形界面操作）
+stedgeai.exe validate --model yunetn_320.onnx --mode host \
+    --files-input stedgeai_validation.npz
+```
+
+> 当前仓库中的 `stedgeai_validation.npz` 使用 Float32 ONNX 模型（`yunetn_320.onnx`）生成。如需为 INT8 量化模型重新生成，修改 `fix_validation_format.py` 中的 `MODEL_PATH` 指向 `yunetn_320_qdq_int8.onnx` 后重新运行。
 
 ### 数据集获取方式
 
@@ -160,7 +183,7 @@ python PC_side/send_image.py face.jpg COM4 921600
 
 1. **D-Cache一致性**：预处理后必须调用 `SCB_CleanDCache_by_Addr()` 将数据从D-Cache刷入SDRAM，否则AI推理会读到脏数据
 2. **Keil项目依赖**：克隆后需要STM32CubeMX重新生成 `Drivers/` 和 `Middlewares/`
-3. **Cube.AI版本**：推荐使用STM32 Cube.AI Studio v1.0+ 或 X-CUBE-AI v9.0.0+
+3. **Cube AI版本**：推荐使用STM32 Cube AI Studio v1.0+ 或 X-CUBE-AI v9.0.0+
 4. **串口连接**：使用板载ST-Link/V3-1虚拟串口，Windows下通常识别为 `COM3` 或 `COM4`
 5. **图像格式**：PC端只发送320×240 ARGB8888原始像素数据，预处理（缩放/通道转换）在PC端完成
 6. **检测阈值**：当前阈值（DET_THRESHOLD=0.40, NMS_THRESHOLD=0.40, MIN_BOX_SIZE=10.0）经过Float32模型调优，INT8量化模型可能需要调整
@@ -173,11 +196,11 @@ python PC_side/send_image.py face.jpg COM4 921600
 
 ### Project Overview
 
-This project implements a **deep learning-based face detection system** on the **STM32H747I-DISCO** discovery kit. The system receives images from a PC via USART serial, runs the **YuNet-320** lightweight face detection model using the STM32 Cube.AI runtime on the Cortex-M7 core, and displays the results with bounding box annotations on the OTM8009A LCD panel in real time.
+This project implements a **deep learning-based face detection system** on the **STM32H747I-DISCO** discovery kit. The system receives images from a PC via USART serial, runs the **YuNet-320** lightweight face detection model using the STM32 Cube AI runtime on the Cortex-M7 core, and displays the results with bounding box annotations on the OTM8009A LCD panel in real time.
 
 **Core Features:**
 - MIPI DSI Command Mode LCD display (800×480, DMA2D hardware acceleration)
-- Cube.AI-deployed YuNet-320 face detection model (Float32, ~140M MACCs)
+- Cube AI-deployed YuNet-320 face detection model (Float32, ~140M MACCs)
 - USART binary protocol for receiving 320×240 images (single or batch)
 - Detection post-processing (box decoding + NMS) with green bounding box drawing
 - Dual-core architecture: CM7 handles main control + AI inference, CM4 in standby
@@ -195,8 +218,8 @@ Face_Detection/
 │       ├── ai_detection.h # Detection params, SDRAM layout, API declarations
 │       └── stm32h7xx_hal_conf.h
 ├── CM4/Core/              # CM4 auxiliary core (standby)
-├── AI/App/                # Cube.AI runtime (app_x-cube-ai.c/h)
-├── ai_generated_network/  # Cube.AI generated network code (network.c/h + data)
+├── AI/App/                # Cube AI runtime (app_x-cube-ai.c/h)
+├── ai_generated_network/  # Cube AI generated network code (network.c/h + data)
 ├── PC_side/
 │   └── send_image.py      # PC-side image sender script
 ├── MDK-ARM/               # Keil MDK project files
@@ -217,7 +240,7 @@ Face_Detection/
 | External RAM | IS42S32800J SDRAM 32MB @ 0xD0000000 |
 | Communication | USART1 (PA9/PA10, 115200bps) |
 | IDE | Keil MDK-ARM uVision 5, ARMCC V5.06 |
-| AI Toolchain | STM32 Cube.AI / X-CUBE-AI (ST.AI Embedded Client API) |
+| AI Toolchain | STM32 Cube AI / X-CUBE-AI (ST.AI Embedded Client API) |
 | PC environment | Python 3.8+ / pyserial / Pillow |
 | Device Pack | Keil.STM32H7xx_DFP.2.6.0 |
 
@@ -234,12 +257,35 @@ The YuNet-320 face detection model used in this project comes from the **STM32 M
   - MACCs: ~140M
   - Activation memory: ~2.46MB (at SDRAM 0xD0800000)
 
-The model is compiled into embedded C code using **STM32 Cube.AI Studio** (or X-CUBE-AI CLI), producing the generated files in `ai_generated_network/` and `AI/App/`. To regenerate:
+The model is compiled into embedded C code using **STM32 Cube AI Studio** (or X-CUBE-AI CLI), producing the generated files in `ai_generated_network/` and `AI/App/`. To regenerate:
 
 ```bash
-# Using STM32 Cube.AI CLI
+# Using STM32 Cube AI CLI
 stm32ai generate -m yunetn_320.onnx -o ai_generated_network/ --target stm32h7
 ```
+
+The `model_stm32/py/` directory contains four Python scripts for model validation and Cube AI Studio deployment preparation:
+
+| File | Purpose |
+|------|---------|
+| `test_yunet.py` | Standalone test script (no Model Zoo dependency). Functions: ONNX architecture analysis (parameter count/operators/STM32 compatibility), single/batch image inference, YuNet post-processing decode (anchor + NMS), real-time webcam testing |
+| `generate_validation_dataset.py` | Selects images from WIDER Face, runs ONNX Runtime inference for reference outputs, and generates `validation_data.npz` (keys: `inputs`/`output_00_*`), a CSV manifest, and preprocessed preview images. Supports four sample selection strategies: diverse/easy/hard/crowd |
+| `fix_validation_format.py` | **The script that generates `stedgeai_validation.npz`.** Reuses preprocessing functions from `generate_validation_dataset.py`, flattens inputs/outputs to `(N, -1)` format, and uses ST Edge AI standard key names: `m_inputs_1` + `m_outputs_1`~`m_outputs_12` (1-based indexing) |
+
+**About `stedgeai_validation.npz`:**
+
+`model_stm32/stedgeai_validation.npz` was generated by `fix_validation_format.py` and contains 10 WIDER Face validation set samples. This file is used in **STM32 Cube AI Studio** (formerly ST Edge AI Studio) for:
+
+- **Model Validation**: Load this file in Cube AI Studio as the validation dataset to compare ONNX Runtime reference outputs against Cube AI-generated C model outputs, ensuring no accuracy loss after quantization/compilation
+- **C Model Code Generation**: After validation passes, Cube AI Studio generates embedded C code (`network.c/h` + `network_data.c/h`) from the ONNX model for deployment into the `ai_generated_network/` directory
+
+```bash
+# CLI validation (equivalent to Cube AI Studio GUI operation)
+stedgeai.exe validate --model yunetn_320.onnx --mode host \
+    --files-input stedgeai_validation.npz
+```
+
+> The current `stedgeai_validation.npz` in this repo was generated using the Float32 ONNX model (`yunetn_320.onnx`). To regenerate for the INT8 quantized model, change `MODEL_PATH` in `fix_validation_format.py` to point to `yunetn_320_qdq_int8.onnx` and re-run.
 
 ### Dataset
 
@@ -318,7 +364,7 @@ Fixed image size: 320 × 240 × 4 = 307200 bytes
 
 1. **D-Cache Coherency**: Always call `SCB_CleanDCache_by_Addr()` after preprocessing to flush D-Cache to SDRAM; otherwise the AI engine reads stale data
 2. **Keil Project Dependencies**: After cloning, regenerate `Drivers/` and `Middlewares/` using STM32CubeMX with the `.ioc` file
-3. **Cube.AI Version**: STM32 Cube.AI Studio v1.0+ or X-CUBE-AI v9.0.0+ recommended
+3. **Cube AI Version**: STM32 Cube AI Studio v1.0+ or X-CUBE-AI v9.0.0+ recommended
 4. **Serial Connection**: Use the onboard ST-Link/V3-1 Virtual COM Port; typically appears as `COM3` or `COM4` on Windows
 5. **Image Format**: PC side sends 320×240 ARGB8888 raw pixel data; resizing and format conversion are handled PC-side
 6. **Detection Thresholds**: Current values (DET_THRESHOLD=0.40, NMS_THRESHOLD=0.40, MIN_BOX_SIZE=10.0) are tuned for Float32; adjust for INT8 quantized models if needed
