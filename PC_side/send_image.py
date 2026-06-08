@@ -70,14 +70,21 @@ def find_serial_port():
 
 
 def load_and_convert_image(image_path):
-    """Load image, resize to 320x240 ARGB8888, return raw bytes (307200)."""
+    """Load image, resize to 320x240, convert RGBA->ARGB, return raw bytes (307200)."""
     img = Image.open(image_path).convert("RGBA")
     print(f"  Original: {img.size[0]}x{img.size[1]}")
     img_resized = img.resize((TARGET_WIDTH, TARGET_HEIGHT), Image.BILINEAR)
-    raw = img_resized.tobytes()
+
+    # PIL RGBA bytes: [R, G, B, A, ...]
+    # STM32 expects ARGB read as little-endian uint32: byte0=B, byte1=G, byte2=R, byte3=A
+    # Swap R (byte 0) <-> B (byte 2) for each pixel
+    raw = bytearray(img_resized.tobytes())
+    for i in range(0, len(raw), 4):
+        raw[i], raw[i + 2] = raw[i + 2], raw[i]  # R <-> B
+
     if len(raw) != TARGET_WIDTH * TARGET_HEIGHT * BYTES_PER_PIXEL:
         print(f"  WARNING: got {len(raw)} bytes, expected {TARGET_WIDTH * TARGET_HEIGHT * BYTES_PER_PIXEL}")
-    return raw
+    return bytes(raw)
 
 
 def collect_images(input_path):
