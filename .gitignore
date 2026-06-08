@@ -80,5 +80,9 @@ WIDERFace/
 *.jpg
 *.jpeg
 
+# =============== Claude Code ===============
+CLAUDE.md
+.claude/
+
 # =============== .ai ===============
 *.ai/
