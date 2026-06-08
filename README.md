@@ -76,12 +76,7 @@ Face_Detection/
   - 计算量：~140M MACCs
   - 激活内存：~2.46MB（位于SDRAM 0xD0800000）
 
-模型通过**STM32 Cube AI Studio**（或X-CUBE-AI CLI）编译为嵌入式C代码，生成在`ai_generated_network/`和`AI/App/`目录下。如需重新生成：
-
-```bash
-# STM32 Cube AI CLI 方式
-stm32ai generate -m yunetn_320.onnx -o ai_generated_network/ --target stm32h7
-```
+模型通过**STM32 Cube AI Studio**编译为嵌入式C代码，生成在`ai_generated_network/`和`AI/App/`目录下。
 
 `model_stm32/py/` 目录包含四个 Python 脚本，用于模型验证和 Cube AI Studio 部署准备：
 
@@ -98,13 +93,6 @@ stm32ai generate -m yunetn_320.onnx -o ai_generated_network/ --target stm32h7
 - **模型验证（Validate）**：在 Cube AI Studio 中加载此文件作为验证数据集，对比 ONNX Runtime 参考输出与 Cube AI 生成的 C 模型输出，确保量化/编译后的模型精度无损
 - **C 语言模型生成（Generate）**：验证通过后，Cube AI Studio 从 ONNX 模型生成嵌入式 C 代码（`network.c/h` + `network_data.c/h`），部署到 `ai_generated_network/` 目录
 
-```bash
-# CLI 验证命令（等效于 Cube AI Studio 图形界面操作）
-stedgeai.exe validate --model yunetn_320.onnx --mode host \
-    --files-input stedgeai_validation.npz
-```
-
-> 当前仓库中的 `stedgeai_validation.npz` 使用 Float32 ONNX 模型（`yunetn_320.onnx`）生成。如需为 INT8 量化模型重新生成，修改 `fix_validation_format.py` 中的 `MODEL_PATH` 指向 `yunetn_320_qdq_int8.onnx` 后重新运行。
 
 ### 数据集获取方式
 
@@ -123,8 +111,6 @@ stedgeai.exe validate --model yunetn_320.onnx --mode host \
 #### 1. 编译固件
 
 在Keil MDK-ARM中打开 `MDK-ARM/LCD_DSI_CMD_mode_Single_Buffer.uvprojx`，选择目标 `LCD_DSI_CMD_mode_Single_Buffer_CM7`，编译下载到开发板。
-
-> **注意：** `.gitignore` 排除了 `Drivers/` 和 `Middlewares/` 目录。克隆后需通过STM32CubeMX打开 `.ioc` 文件重新生成HAL驱动代码。
 
 #### 2. PC端准备
 
