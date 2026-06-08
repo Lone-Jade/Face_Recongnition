@@ -53,12 +53,13 @@ extern stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
      "MULT" packet signals end of batch; STM32 enters multi-image cycle mode.
    Fixed image size = 320 x 240 x 4 = 307200 bytes (ARGB8888).
    Max images stored in SDRAM at consecutive offsets from AI_IMG_BUF_ADDR. */
-#define USART_RX_MAGIC_FACE 0x45434146  /* "FACE" little-endian */
-#define USART_RX_MAGIC_MULT 0x544C554D  /* "MULT" little-endian */
-#define USART_RX_IMG_SIZE   (320 * 240 * 4)
-#define USART_IMG_MAX       10           /* Max images in SDRAM (4MB / 300KB) */
+#define USART_RX_MAGIC_FACE 0x45434146 /* "FACE" little-endian */
+#define USART_RX_MAGIC_MULT 0x544C554D /* "MULT" little-endian */
+#define USART_RX_IMG_SIZE (320 * 240 * 4)
+#define USART_IMG_MAX 10 /* Max images in SDRAM (4MB / 300KB) */
 
-typedef enum {
+typedef enum
+{
   RX_STATE_IDLE = 0,
   RX_STATE_GOT_MAGIC,
   RX_STATE_GOT_SIZE,
@@ -66,17 +67,17 @@ typedef enum {
 } rx_state_t;
 
 static rx_state_t rx_state = RX_STATE_IDLE;
-static uint32_t   rx_expected_size = 0;
-static uint32_t   rx_received = 0;
-static uint8_t    rx_header_buf[8];  /* 4 magic + 4 size */
-static uint8_t    rx_header_idx = 0;
-static uint32_t   rx_magic_type = 0; /* FACE or MULT */
+static uint32_t rx_expected_size = 0;
+static uint32_t rx_received = 0;
+static uint8_t rx_header_buf[8]; /* 4 magic + 4 size */
+static uint8_t rx_header_idx = 0;
+static uint32_t rx_magic_type = 0; /* FACE or MULT */
 static volatile uint8_t rx_img_ready = 0;
-static uint8_t  rx_byte;  /* Single-byte RX buffer for HAL_UART_Receive_IT */
+static uint8_t rx_byte; /* Single-byte RX buffer for HAL_UART_Receive_IT */
 
 /* Multi-image mode */
-static int      usart_img_count = 0;   /* Number of USART images received */
-static int      usart_img_index = 0;   /* Current display index */
+static int usart_img_count = 0;                /* Number of USART images received */
+static int usart_img_index = 0;                /* Current display index */
 static volatile uint8_t usart_multi_ready = 0; /* MULT packet received */
 
 /* Helper: start receiving one byte via interrupt */
@@ -136,14 +137,14 @@ OTM8009A_Object_t *pObj;
 
 /* USER CODE BEGIN PV */
 static int32_t pending_buffer = -1;
-static int      ImageIndex = 0;
+static int ImageIndex = 0;
 static const uint32_t *Images[] =
     {
-        face_img_0,  /* WIDER Face: Parade */
-        face_img_1,  /* WIDER Face: Students */
+        face_img_0, /* WIDER Face: Parade */
+        face_img_1, /* WIDER Face: Students */
 };
-static int   num_builtin = 2;
-static int   use_builtin = 1;   /* 1 = demo mode, 0 = USART image mode */
+static int num_builtin = 2;
+static int use_builtin = 1; /* 1 = demo mode, 0 = USART image mode */
 
 uint8_t My_String[40];
 
@@ -151,9 +152,9 @@ uint8_t My_String[40];
    NOTE: See ai_detection.h for the full SDRAM buffer layout.
    Key: AI activation buf2 at 0xD0800000 (set in app_x-cube-ai.c). */
 
-static float *ai_input;                  /* Model input tensor (in activation buf) */
+static float *ai_input; /* Model input tensor (in activation buf) */
 
-static Detection detections[MAX_DETECTIONS];  /* Face detection results */
+static Detection detections[MAX_DETECTIONS]; /* Face detection results */
 static int num_detections = 0;
 
 /* Image buffer in SDRAM for USART-received image */
@@ -309,17 +310,17 @@ int main(void)
 
   /* Display example brief   */
   LCD_BriefDisplay();
-    
+
   /*Draw first image */
-  CopyBuffer((uint32_t *)Images[ImageIndex++], (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240);  //240+320+240 =800, ͼ��ˮƽ����
+  CopyBuffer((uint32_t *)Images[ImageIndex++], (uint32_t *)LCD_FRAME_BUFFER, 240, 160, 320, 240); /* 240+320+240=800, image centered horizontally */
   pending_buffer = 0;
-  
+
   /*Refresh the LCD display*/
   HAL_DSI_Refresh(&hlcd_dsi);
 
   /* AI - Initialize Cube.AI runtime and model (fills stai_input/stai_output) */
   STM32CubeAI_Studio_AI_Init();
-  ai_input = (float *)stai_input[0];  /* Cache input tensor: 1x3x320x320 float32 */
+  ai_input = (float *)stai_input[0]; /* Cache input tensor: 1x3x320x320 float32 */
   /* USER CODE END 2 */
 
   /* Start USART RX for image reception (non-blocking) */
@@ -378,8 +379,8 @@ int main(void)
       else
       {
         num_detections = ai_postprocess(stai_output, detections, MAX_DETECTIONS,
-                                         DET_THRESHOLD, NMS_THRESHOLD,
-                                         MIN_BOX_SIZE);
+                                        DET_THRESHOLD, NMS_THRESHOLD,
+                                        MIN_BOX_SIZE);
         ai_draw_detections(detections, num_detections, (uint32_t *)LCD_FRAME_BUFFER,
                            800, 240, 160, 320, 240);
 
@@ -797,13 +798,13 @@ void LCD_MspInit(void)
  */
 static void LCD_BriefDisplay(void)
 {
-  UTIL_LCD_SetFont(&Font24);  
-  UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_BLUE); 
-  UTIL_LCD_FillRect(0, 0, 800, 112, UTIL_LCD_COLOR_BLUE);  //�����ﹲ6���ַ�������ռ�����أ�24+24+16+16+16+16 = 112
+  UTIL_LCD_SetFont(&Font24);
+  UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_BLUE);
+  UTIL_LCD_FillRect(0, 0, 800, 112, UTIL_LCD_COLOR_BLUE); /* Blue header: 6 lines, 24+24+16+16+16+16 = 112px */
   UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_WHITE);
-  UTIL_LCD_FillRect(0, 112, 800, 368, UTIL_LCD_COLOR_WHITE);  //112+368 = 480��LCD�Ĵ�ֱ����
+  UTIL_LCD_FillRect(0, 112, 800, 368, UTIL_LCD_COLOR_WHITE); /* White area: 112+368 = 480px total */
   UTIL_LCD_SetBackColor(UTIL_LCD_COLOR_BLUE);
-  UTIL_LCD_DisplayStringAtLine(1, (uint8_t *)"            Final Project Face_Detection");  // centered title
+  UTIL_LCD_DisplayStringAtLine(1, (uint8_t *)"            Final Project Face_Detection"); // centered title
   UTIL_LCD_SetFont(&Font16);
   UTIL_LCD_DisplayStringAtLine(4, (uint8_t *)"The image input through the serial port is used to recognize");
   UTIL_LCD_DisplayStringAtLine(5, (uint8_t *)"faces on the development board and display the results.");
@@ -873,103 +874,104 @@ void DSI_IRQHandler(void)
 }
 
 /**
-  * @brief  Dummy ExitRun0Mode �� not used in this project.
-  *         CM4 wakeup is handled by HSEM semaphore in main().
-  * @retval None
-  */
+ * @brief  Dummy ExitRun0Mode �� not used in this project.
+ *         CM4 wakeup is handled by HSEM semaphore in main().
+ * @retval None
+ */
 void ExitRun0Mode(void)
 {
-    /* Empty: CM4 is woken via HSEM, not via RUN0 mode exit */
+  /* Empty: CM4 is woken via HSEM, not via RUN0 mode exit */
 }
 
 /**
-  * @brief  UART RX Complete callback — receives one byte at a time.
-  *         Implements protocol: magic "FACE" → size → raw ARGB8888 data.
-  * @param  huart: UART handle pointer
-  * @retval None
-  */
-/* Declared above: static uint8_t rx_byte; — single-byte RX DMA buffer */
+ * @brief  UART RX Complete callback �? receives one byte at a time.
+ *         Implements protocol: magic "FACE" �? size �? raw ARGB8888 data.
+ * @param  huart: UART handle pointer
+ * @retval None
+ */
+/* Declared above: static uint8_t rx_byte; �? single-byte RX DMA buffer */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if (huart->Instance != USART1) return;
+  if (huart->Instance != USART1)
+    return;
 
   uint8_t byte = rx_byte;
 
   switch (rx_state)
   {
-    case RX_STATE_IDLE:
-      rx_header_buf[rx_header_idx++] = byte;
-      if (rx_header_idx >= 4)
+  case RX_STATE_IDLE:
+    rx_header_buf[rx_header_idx++] = byte;
+    if (rx_header_idx >= 4)
+    {
+      uint32_t magic = *(uint32_t *)rx_header_buf;
+      if (magic == USART_RX_MAGIC_FACE || magic == USART_RX_MAGIC_MULT)
       {
-        uint32_t magic = *(uint32_t *)rx_header_buf;
-        if (magic == USART_RX_MAGIC_FACE || magic == USART_RX_MAGIC_MULT)
-        {
-          rx_magic_type = magic;
-          rx_state = RX_STATE_GOT_MAGIC;
-          rx_header_idx = 0;
-        }
-        else
-        {
-          rx_header_buf[0] = rx_header_buf[1];
-          rx_header_buf[1] = rx_header_buf[2];
-          rx_header_buf[2] = rx_header_buf[3];
-          rx_header_idx = 3;
-        }
+        rx_magic_type = magic;
+        rx_state = RX_STATE_GOT_MAGIC;
+        rx_header_idx = 0;
       }
-      break;
-
-    case RX_STATE_GOT_MAGIC:
-      rx_header_buf[rx_header_idx++] = byte;
-      if (rx_header_idx >= 4)
+      else
       {
-        if (rx_magic_type == USART_RX_MAGIC_MULT)
-        {
-          /* MULT packet: count is in the size field, no image data follows */
-          uint32_t count = *(uint32_t *)(rx_header_buf);
-          if (count > 0 && count <= USART_IMG_MAX)
-          {
-            usart_img_count = (int)count;
-            usart_img_index = 0;
-            usart_multi_ready = 1;
-          }
-          rx_state = RX_STATE_IDLE;
-          rx_header_idx = 0;
-        }
-        else
-        {
-          /* FACE: size field, then image data */
-          rx_expected_size = *(uint32_t *)(rx_header_buf);
-          if (rx_expected_size > 0 && rx_expected_size <= USART_RX_IMG_SIZE * 4)
-          {
-            rx_received = 0;
-            rx_state = RX_STATE_RECEIVING;
-          }
-          else
-          {
-            rx_state = RX_STATE_IDLE;
-            rx_header_idx = 0;
-          }
-        }
+        rx_header_buf[0] = rx_header_buf[1];
+        rx_header_buf[1] = rx_header_buf[2];
+        rx_header_buf[2] = rx_header_buf[3];
+        rx_header_idx = 3;
       }
-      break;
+    }
+    break;
 
-    case RX_STATE_RECEIVING:
-      /* Store byte at correct SDRAM offset for current image index */
-      ((uint8_t *)usart_get_img(usart_img_count))[rx_received] = byte;
-      rx_received++;
-      if (rx_received >= rx_expected_size)
+  case RX_STATE_GOT_MAGIC:
+    rx_header_buf[rx_header_idx++] = byte;
+    if (rx_header_idx >= 4)
+    {
+      if (rx_magic_type == USART_RX_MAGIC_MULT)
       {
-        usart_img_count++;
-        rx_img_ready = 1;
+        /* MULT packet: count is in the size field, no image data follows */
+        uint32_t count = *(uint32_t *)(rx_header_buf);
+        if (count > 0 && count <= USART_IMG_MAX)
+        {
+          usart_img_count = (int)count;
+          usart_img_index = 0;
+          usart_multi_ready = 1;
+        }
         rx_state = RX_STATE_IDLE;
         rx_header_idx = 0;
       }
-      break;
+      else
+      {
+        /* FACE: size field, then image data */
+        rx_expected_size = *(uint32_t *)(rx_header_buf);
+        if (rx_expected_size > 0 && rx_expected_size <= USART_RX_IMG_SIZE * 4)
+        {
+          rx_received = 0;
+          rx_state = RX_STATE_RECEIVING;
+        }
+        else
+        {
+          rx_state = RX_STATE_IDLE;
+          rx_header_idx = 0;
+        }
+      }
+    }
+    break;
 
-    default:
+  case RX_STATE_RECEIVING:
+    /* Store byte at correct SDRAM offset for current image index */
+    ((uint8_t *)usart_get_img(usart_img_count))[rx_received] = byte;
+    rx_received++;
+    if (rx_received >= rx_expected_size)
+    {
+      usart_img_count++;
+      rx_img_ready = 1;
       rx_state = RX_STATE_IDLE;
       rx_header_idx = 0;
-      break;
+    }
+    break;
+
+  default:
+    rx_state = RX_STATE_IDLE;
+    rx_header_idx = 0;
+    break;
   }
 
   USART_StartRxByte();

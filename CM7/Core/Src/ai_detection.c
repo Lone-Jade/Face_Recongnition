@@ -1,14 +1,14 @@
 /**
   ******************************************************************************
   * @file           : ai_detection.c
-  * @brief          : AI face detection — preprocessing, postprocessing, drawing
+  * @brief          : AI face detection - preprocessing, postprocessing, drawing
   ******************************************************************************
   */
 
 #include "ai_detection.h"
 #include <math.h>
 
-/* YuNet anchor configuration for 320×320 input (stride only) */
+/* YuNet anchor configuration for 320x320 input (stride only) */
 const int yu_strides[3]    = YU_STRIDES;
 const int yu_grid_sizes[3] = YU_GRID_SIZES;
 
@@ -26,7 +26,7 @@ const int yu_grid_sizes[3] = YU_GRID_SIZES;
   *
   *         IMPORTANT: The model uses STAI_FLAG_CHANNEL_FIRST, meaning
   *         data layout MUST be NCHW: input[c][y][x] = dst[c*H*W + y*W + x].
-  *         Channel order is BGR (c=0→Blue, c=1→Green, c=2→Red).
+  *         Channel order is BGR (c=0->Blue, c=1->Green, c=2->Red).
   */
 void ai_preprocess(uint32_t *src, int src_w, int src_h,
                    float *dst, int dst_w, int dst_h)
@@ -54,7 +54,7 @@ void ai_preprocess(uint32_t *src, int src_w, int src_h,
         g = (pixel >> 8) & 0xFF;
         r = (pixel >> 16) & 0xFF;
 
-        /* BGR channel order, values in [0, 255] — no normalization */
+        /* BGR channel order, values in [0, 255] - no normalization */
         float val;
         if (c == 0)      val = (float)b;
         else if (c == 1) val = (float)g;
@@ -70,7 +70,7 @@ void ai_preprocess(uint32_t *src, int src_w, int src_h,
 
 /**
   * @brief  Decode YuNet 12-output tensors into face Detection structs.
-  *         Anchors at grid CORNER (j*stride, i*stride) — matching
+  *         Anchors at grid CORNER (j*stride, i*stride) - matching
   *         STM32 model zoo convention. Regression targets are offsets
   *         from grid top-left corner in stride units.
   *         Applies: score threshold, min-box-size filter, IoU NMS.
@@ -78,8 +78,8 @@ void ai_preprocess(uint32_t *src, int src_w, int src_h,
   *         ST AI compiled output order:
   *           outputs[0..2]  = cls_8, cls_16, cls_32   (sigmoid already applied)
   *           outputs[3..5]  = obj_8, obj_16, obj_32   (sigmoid already applied)
-  *           outputs[6..8]  = bbox_8, bbox_16, bbox_32 (4×H×W CHW flat)
-  *           outputs[9..11] = kps_8, kps_16, kps_32   (10×H×W CHW flat, unused)
+  *           outputs[6..8]  = bbox_8, bbox_16, bbox_32 (4xHxW CHW flat)
+  *           outputs[9..11] = kps_8, kps_16, kps_32   (10xHxW CHW flat, unused)
   *
   * @retval Number of valid detections after NMS.
   */
@@ -140,9 +140,9 @@ int ai_postprocess(stai_ptr *outputs, Detection *dets, int max_dets,
         float score = cls[loc] * obj[loc];
         if (score < threshold) continue;
 
-        /* ST AI outputs bbox in interleaved format (N×4), NOT CHW (4×N).
-           Verified by USART debug: IL indexing produces correct 74×140 box
-           matching PC ONNX, while CHW produces wrong 23×24 box. */
+        /* ST AI outputs bbox in interleaved format (Nx4), NOT CHW (4xN).
+           Verified by USART debug: IL indexing produces correct 74x140 box
+           matching PC ONNX, while CHW produces wrong 23x24 box. */
         float dx = bbox[loc * 4 + 0];
         float dy = bbox[loc * 4 + 1];
         float dw = bbox[loc * 4 + 2];
@@ -365,7 +365,7 @@ void ai_draw_detections(Detection *dets, int ndet, uint32_t *fb,
                         int img_w, int img_h)
 {
   int d, t, x, y;
-  float scale_x = (float)img_w / 320.0f;  /* Model input was 320×320 */
+  float scale_x = (float)img_w / 320.0f;  /* Model input was 320x320 */
   float scale_y = (float)img_h / 320.0f;
 
   for (d = 0; d < ndet; d++)

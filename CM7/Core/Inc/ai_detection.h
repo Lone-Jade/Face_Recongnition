@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file           : ai_detection.h
-  * @brief          : AI face detection — preprocessing, postprocessing, drawing
+  * @brief          : AI face detection - preprocessing, postprocessing, drawing
   ******************************************************************************
   */
 
@@ -13,7 +13,7 @@
 
 /* ---- SDRAM Buffer Layout (32MB @ 0xD0000000) ---- */
 #define SDRAM_BASE              0xD0000000
-#define LCD_FRAME_BUFFER_ADDR   0xD0000000  /* Frame buffer: 800×480×4 ≈ 1.5MB */
+#define LCD_FRAME_BUFFER_ADDR   0xD0000000  /* Frame buffer: 800x480x4 �� 1.5MB */
 #define AI_IMG_BUF_ADDR         0xD0400000  /* Raw image buffer (USART receive) */
 #define AI_CAM_BUF_ADDR         0xD0600000  /* Camera frame buffer (future) */
 #define AI_ACTIVATION_2_ADDR    0xD0800000  /* AI activation buf2: 2,457,600B.
@@ -28,7 +28,7 @@
    INT8 quantization noise creates many tiny (7-18px) false positives
    that require min-box filtering + higher confidence threshold. */
 #define MAX_DETECTIONS    50
-#define DET_THRESHOLD     0.40f    /* Score threshold — lower to catch smaller/blurrier faces */
+#define DET_THRESHOLD     0.40f    /* Score threshold - lower to catch smaller/blurrier faces */
 #define NMS_THRESHOLD     0.40f    /* IoU threshold for NMS */
 #define MIN_BOX_SIZE      10.0f    /* Min box width/height in 320x320 input pixels */
 
@@ -47,11 +47,11 @@ extern const int   yu_grid_sizes[3];
   * @brief  Convert ARGB8888 image to float32 NCHW tensor.
   *         Model expects BGR channel order with CHANNEL_FIRST layout:
   *         dst[c][y][x] = dst[c*H*W + y*W + x]
-  *         c=0→Blue, c=1→Green, c=2→Red.  Values in [0, 255], no rescale.
-  * @param  src    Pointer to ARGB8888 image (src_w × src_h)
+  *         c=0->Blue, c=1->Green, c=2->Red.  Values in [0, 255], no rescale.
+  * @param  src    Pointer to ARGB8888 image (src_w x src_h)
   * @param  src_w  Source width
   * @param  src_h  Source height
-  * @param  dst    Pointer to float32 NCHW tensor (3 × dst_h × dst_w)
+  * @param  dst    Pointer to float32 NCHW tensor (3 x dst_h x dst_w)
   * @param  dst_w  Model input width (320 for YuNet-320)
   * @param  dst_h  Model input height (320 for YuNet-320)
   */
