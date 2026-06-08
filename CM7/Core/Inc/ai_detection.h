@@ -28,9 +28,9 @@
    INT8 quantization noise creates many tiny (7-18px) false positives
    that require min-box filtering + higher confidence threshold. */
 #define MAX_DETECTIONS    50
-#define DET_THRESHOLD     0.50f    /* Score threshold — lower to catch smaller/blurrier faces */
+#define DET_THRESHOLD     0.40f    /* Score threshold — lower to catch smaller/blurrier faces */
 #define NMS_THRESHOLD     0.40f    /* IoU threshold for NMS */
-#define MIN_BOX_SIZE      12.0f    /* Min box width/height in 320x320 input pixels */
+#define MIN_BOX_SIZE      10.0f    /* Min box width/height in 320x320 input pixels */
 
 typedef struct {
     float x1, y1, x2, y2;

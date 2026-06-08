@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """
-PC-side test script: send face images to STM32H747I-DISCO via USART (serial).
+PC-side test script: send face image(s) to STM32H747I-DISCO via USART (serial).
 
-Protocol:
+Protocol (single image, backward compatible):
   1. 4-byte magic: "FACE" (little-endian: 0x45434146)
-  2. 4-byte image size: number of raw ARGB8888 bytes (little-endian uint32_t)
-  3. Raw ARGB8888 pixel data: 320 × 240 × 4 = 307200 bytes
+  2. 4-byte image size: raw ARGB8888 bytes (little-endian uint32_t)
+  3. Raw ARGB8888 pixel data: 320 x 240 x 4 = 307200 bytes
+
+Protocol (multiple images, new):
+  1. Send each image with "FACE" protocol (STM32 stores at consecutive SDRAM addrs)
+  2. After last image, send: "MULT" + num_images(4B LE) + 0(4B) + no data
+     STM32 then cycles through all received images.
 
 Usage:
-  python send_image.py <image_file> [COM port] [baudrate]
+  python send_image.py <image_file_or_folder> [COM port] [baudrate]
 
 Examples:
-  python send_image.py face.jpg              # Auto-detect COM port
-  python send_image.py face.jpg COM3         # Specify COM port
-  python send_image.py face.jpg COM3 115200  # Full args
+  python send_image.py face.jpg                              # Single image
+  python send_image.py WIDERFace/WIDER_test/images/0--Parade # Folder
+  python send_image.py . COM4                                # All images in current dir
+  python send_image.py face.jpg COM3 115200                  # Full args
 
 Requires: pip install pyserial pillow
 """
@@ -21,6 +27,7 @@ Requires: pip install pyserial pillow
 import sys
 import struct
 import time
+import os
 from pathlib import Path
 
 try:
@@ -36,80 +43,94 @@ except ImportError:
     sys.exit(1)
 
 # ---- Configuration ----
-TARGET_WIDTH   = 320
-TARGET_HEIGHT  = 240
-MAGIC          = b"FACE"         # 4-byte header
-DEFAULT_PORT   = "COM3"          # Default serial port
-BAUDRATE       = 115200
-BYTES_PER_PIXEL = 4              # ARGB8888
+TARGET_WIDTH    = 320
+TARGET_HEIGHT   = 240
+MAGIC_FACE      = b"FACE"         # Single image magic
+MAGIC_MULT      = b"MULT"         # End-of-batch magic
+DEFAULT_PORT    = "COM3"
+BAUDRATE        = 115200
+BYTES_PER_PIXEL = 4               # ARGB8888
+MAX_IMAGES      = 10              # Max images STM32 can store (SDRAM: 4MB / 300KB)
+IMG_EXTENSIONS  = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
 
-# ---- Serial port discovery ----
+
 def find_serial_port():
-    """Try to find the STM32 serial port."""
+    """Auto-detect STM32 serial port."""
     import serial.tools.list_ports
     ports = list(serial.tools.list_ports.comports())
     for p in ports:
-        # STM32 typically shows up as "STMicroelectronics STLink Virtual COM Port"
         if "STMicroelectronics" in p.description or "STLink" in p.description:
-            print(f"Found STM32 port: {p.device} — {p.description}")
+            print(f"Found STM32 port: {p.device} - {p.description}")
             return p.device
     if ports:
-        print(f"No STM32 port found. Available ports: {[p.device for p in ports]}")
-        return ports[0].device  # Guess first available
-    else:
-        print("No serial ports found!")
-        return None
+        print(f"No STM32 port found. Available: {[p.device for p in ports]}")
+        return ports[0].device
+    print("No serial ports found!")
+    return None
 
 
 def load_and_convert_image(image_path):
-    """
-    Load an image file and convert it to ARGB8888 format at 320×240.
-    Returns raw bytes of size 320*240*4 = 307200.
-    """
+    """Load image, resize to 320x240 ARGB8888, return raw bytes (307200)."""
     img = Image.open(image_path).convert("RGBA")
-    print(f"Original image: {img.size[0]}×{img.size[1]}, mode={img.mode}")
-
-    # Resize to 320×240 (fit with letterbox/padding if needed)
+    print(f"  Original: {img.size[0]}x{img.size[1]}")
     img_resized = img.resize((TARGET_WIDTH, TARGET_HEIGHT), Image.BILINEAR)
-    print(f"Resized to: {img_resized.size[0]}×{img_resized.size[1]}")
-
-    # Convert to raw ARGB8888 bytes
-    # PIL RGBA = [R, G, B, A] per pixel in memory
     raw = img_resized.tobytes()
-    print(f"Raw bytes: {len(raw)} (expected {TARGET_WIDTH * TARGET_HEIGHT * BYTES_PER_PIXEL})")
-
+    if len(raw) != TARGET_WIDTH * TARGET_HEIGHT * BYTES_PER_PIXEL:
+        print(f"  WARNING: got {len(raw)} bytes, expected {TARGET_WIDTH * TARGET_HEIGHT * BYTES_PER_PIXEL}")
     return raw
 
 
-def send_over_serial(ser, raw_data):
-    """
-    Send the image data to STM32 following the protocol:
-      magic (4 bytes) + size (4 bytes LE uint32) + pixel data.
-    """
+def collect_images(input_path):
+    """Return list of image file paths from a file or folder."""
+    p = Path(input_path)
+    if p.is_file():
+        if p.suffix.lower() in IMG_EXTENSIONS:
+            return [str(p)]
+        else:
+            print(f"Error: '{input_path}' is not a supported image file.")
+            sys.exit(1)
+    elif p.is_dir():
+        images = []
+        for ext in IMG_EXTENSIONS:
+            images.extend(sorted(p.glob(f"*{ext}")) + sorted(p.glob(f"*{ext.upper()}")))
+        # Remove duplicates, sort by name
+        images = sorted(set(str(img) for img in images))
+        if not images:
+            print(f"Error: no image files found in '{input_path}'")
+            sys.exit(1)
+        print(f"Found {len(images)} image(s) in folder.")
+        if len(images) > MAX_IMAGES:
+            print(f"Warning: truncated to {MAX_IMAGES} images (STM32 storage limit).")
+            images = images[:MAX_IMAGES]
+        return images
+    else:
+        print(f"Error: '{input_path}' is not a valid file or directory.")
+        sys.exit(1)
+
+
+def send_single_image(ser, raw_data, img_index, total):
+    """Send one image with FACE protocol. Returns est. time in seconds."""
     total_size = len(raw_data)
-    header = MAGIC + struct.pack("<I", total_size)  # 8-byte header
+    header = MAGIC_FACE + struct.pack("<I", total_size)
     payload = header + raw_data
-    total_payload = len(payload)
 
-    print(f"\nSending {total_payload} bytes ({total_size} image + 8 header)...")
-    print(f"  Magic:  0x{MAGIC.hex()}")
-    print(f"  Size:   {total_size} (0x{total_size:08X})")
-    print(f"  Baud:   {BAUDRATE}")
-    est_time = total_payload * 10.0 / BAUDRATE  # 10 bits per byte (8N1)
-    print(f"  Est:    {est_time:.1f} seconds...")
+    print(f"\n  Image {img_index}/{total}: {total_size} bytes ->", end=" ", flush=True)
 
-    # Write in chunks for progress display
     CHUNK = 4096
     sent = 0
-    while sent < total_payload:
-        chunk = payload[sent : sent + CHUNK]
+    while sent < len(payload):
+        chunk = payload[sent:sent + CHUNK]
         ser.write(chunk)
         sent += len(chunk)
-        pct = sent * 100.0 / total_payload
-        print(f"\r  Progress: {sent}/{total_payload} bytes ({pct:.1f}%)", end="", flush=True)
+    print("OK")
+    return len(payload) * 10.0 / BAUDRATE
 
-    print("\n  Done sending!")
-    return est_time
+
+def send_mult_end(ser, num_images):
+    """Send MULT end-of-batch packet. STM32 enters multi-image cycle mode."""
+    header = MAGIC_MULT + struct.pack("<I", num_images) + struct.pack("<I", 0)
+    ser.write(header)
+    print(f"\n  Sent MULT: {num_images} image(s) total. STM32 will cycle through them.")
 
 
 def main():
@@ -117,14 +138,13 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    image_path = sys.argv[1]
-    port_name  = sys.argv[2] if len(sys.argv) > 2 else None
-    baudrate   = int(sys.argv[3]) if len(sys.argv) > 3 else BAUDRATE
+    input_path   = sys.argv[1]
+    port_name    = sys.argv[2] if len(sys.argv) > 2 else None
+    baudrate     = int(sys.argv[3]) if len(sys.argv) > 3 else BAUDRATE
 
-    # Validate image file
-    if not Path(image_path).exists():
-        print(f"Error: image file not found: {image_path}")
-        sys.exit(1)
+    # Collect images
+    image_files = collect_images(input_path)
+    total = len(image_files)
 
     # Find serial port
     if port_name is None:
@@ -133,47 +153,52 @@ def main():
         print("Please specify COM port manually, e.g.: python send_image.py img.jpg COM3")
         sys.exit(1)
 
-    # Load and convert
-    raw_data = load_and_convert_image(image_path)
+    print(f"\n{'='*60}")
+    print(f"  Sending {total} image(s) to {port_name} at {baudrate} baud")
+    print(f"{'='*60}")
 
-    # Open serial and send
     try:
         ser = serial.Serial(port_name, baudrate, timeout=1)
-        print(f"Opened {port_name} at {baudrate} baud")
-
-        # Small delay to let STM32 stabilize
+        print(f"Opened {port_name}")
         time.sleep(0.5)
 
-        send_over_serial(ser, raw_data)
+        for i, img_file in enumerate(image_files):
+            print(f"\n[{i+1}/{total}] {img_file}")
+            raw = load_and_convert_image(img_file)
+            send_single_image(ser, raw, i + 1, total)
+            # Wait for STM32 to process (main loop has 2s delay between frames)
+            time.sleep(1.0)
 
-        print("\nWaiting for STM32 to process...")
-        # Optionally read any response from STM32
-        ser.timeout = 2.0
-        response = b""
+        if total > 1:
+            # Send MULT end-of-batch to trigger cycle mode
+            send_mult_end(ser, total)
+        # For single image: no MULT needed (backward compatible)
+
+        time.sleep(0.5)
+
+        # Read any response
+        ser.timeout = 1.0
         try:
             while True:
                 b = ser.read(1)
                 if not b:
                     break
-                response += b
-        except KeyboardInterrupt:
+        except:
             pass
-        if response:
-            print(f"STM32 response ({len(response)} bytes): {response.decode('ascii', errors='replace')[:200]}")
 
     except serial.SerialException as e:
-        print(f"Serial error: {e}")
+        print(f"\nSerial error: {e}")
         print(f"Troubleshooting:")
         print(f"  1. Is the STM32 board connected and powered?")
-        print(f"  2. Is {port_name} the correct port?")
-        print(f"  3. Is another program (terminal, STM32CubeProgrammer) using the port?")
+        print(f"  2. Is {port_name} the correct COM port?")
+        print(f"  3. Is another program using the port?")
         sys.exit(1)
     finally:
         if 'ser' in locals() and ser.is_open:
             ser.close()
-            print("Serial port closed.")
+            print("\nSerial port closed.")
 
-    print("Finished!")
+    print(f"\nFinished! Sent {total} image(s).")
 
 
 if __name__ == "__main__":

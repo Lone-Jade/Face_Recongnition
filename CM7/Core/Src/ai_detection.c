@@ -7,15 +7,15 @@
 
 #include "ai_detection.h"
 #include <math.h>
-#include <stdio.h>
 
 /* YuNet anchor configuration for 320×320 input (stride only) */
 const int yu_strides[3]    = YU_STRIDES;
 const int yu_grid_sizes[3] = YU_GRID_SIZES;
 
 /* Debug flag: set to 1 to enable verbose serial output, 0 to disable.
-   NOTE: renamed from AI_DEBUG to AI_DBG to avoid conflict with ST AI macro. */
-#define AI_DBG 1
+   NOTE: renamed from AI_DEBUG to AI_DBG to avoid conflict with ST AI macro.
+   Debug printf code preserved in: txt_or_md/debug_code_reference.c */
+#define AI_DBG 0
 
 /* ========== Preprocessing ========== */
 

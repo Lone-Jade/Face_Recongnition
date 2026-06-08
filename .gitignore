@@ -51,14 +51,31 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
-face_detection/WIDERFace/
 face_detection/output/
-face_detection/*.zip
 
-# =============== 其他 ===============
+# 数据集
+WIDERFace/
+**/WIDERFace/
+
+# =============== 压缩包 ===============
 *.rar
 *.zip
 *.7z
+*.tar
+*.gz
+*.bz2
+*.xz
+*.tgz
+*.tbz2
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.lzma
+*.lzma
+*.lz4
+*.zst
+
+# =============== 图片（数据集来源，不应入库） ===============
 *.png
 *.jpg
 *.jpeg
