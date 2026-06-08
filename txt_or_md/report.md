@@ -6,7 +6,7 @@
 
 1. 掌握STM32H747I-DISCO开发板双核（CM7+CM4）启动流程及外设驱动开发方法
 2. 掌握DSI Command Mode + LTDC + DMA2D的LCD显示管线配置，实现图像帧缓冲显示
-3. 掌握STM32 Cube.AI工具链的使用，完成深度学习模型从ONNX到嵌入式C代码的转换与部署
+3. 掌握STM32Cube AI Studio的使用，完成深度学习模型从ONNX到嵌入式C代码的转换与部署
 4. 实现完整的"PC端发送图像→USART接收→AI推理→LCD显示检测框"嵌入式视觉应用流水线
 5. 深入理解嵌入式AI推理中的内存布局（SDRAM分配、NCHW张量格式）、量化精度损失及后处理优化策略
 
@@ -31,7 +31,7 @@
 |------|-----------|
 | IDE | Keil MDK-ARM uVision 5, ARMCC V5.06 update 6 |
 | 设备包 | Keil.STM32H7xx_DFP.2.6.0 |
-| Cube.AI | STM32 Cube.AI Studio / X-CUBE-AI, ST.AI Embedded Client API |
+| AI工具链 | STM32Cube AI Studio (替代旧版 X-CUBE-AI / Cube.AI), ST.AI Embedded Client API |
 | PC端脚本 | Python 3 + pyserial + Pillow |
 | 模型 | YuNet-320 (轻量级人脸检测), 输入 1×3×320×320, 输出12个张量 |
 | 优化等级 | -O4 |
@@ -178,9 +178,11 @@ if (pending_buffer < 0) {
 | 激活内存 | 约2.46MB (包括buf2的大张量) |
 | 量化 | Float32 (未做INT8量化) |
 
-#### 3.2.2 Cube.AI 初始化流程
+#### 3.2.2 STM32Cube AI Studio 初始化流程
 
-通过ST.AI Embedded Client API初始化模型：
+本工程的AI网络代码（`network.c/h`、`network_data.c/h`、`app_x-cube-ai.c/h`）均由 **STM32Cube AI Studio** 自动生成。该工具是ST官方推出的新一代AI部署工具，替代了旧版本的 X-CUBE-AI（即 Cube.AI）。生成代码基于 ST.AI Embedded Client API：
+
+> **说明：** STM32Cube AI Studio 的前身即 X-CUBE-AI（旧称 Cube.AI）。本工程在开发过程中统一使用 STM32Cube AI Studio 生成所有AI相关代码，所使用的 `stai_*` API 即为新版本引入的 ST.AI Embedded Client API，相较于旧版 Cube.AI 的 `ai_*` API 更加精简和现代化。
 
 ```c
 // app_x-cube-ai.c 中的初始化
@@ -393,7 +395,7 @@ if total > 1:
 
 **现象：** AI推理结果始终为0或全噪声，检测不到任何人脸。
 
-**原因：** STM32H7的CM7内核有D-Cache。当CPU将预处理后的数据写入`ai_input`（位于SDRAM的激活缓冲区）时，数据可能只停留在D-Cache中，未被写入物理SDRAM。Cube.AI的推理引擎通过DMA或其他总线主设备读取SDRAM时，读到的却是旧数据。
+**原因：** STM32H7的CM7内核有D-Cache。当CPU将预处理后的数据写入`ai_input`（位于SDRAM的激活缓冲区）时，数据可能只停留在D-Cache中，未被写入物理SDRAM。STM32Cube AI Studio生成的推理引擎（ST.AI Runtime）通过内部总线主设备读取SDRAM时，读到的却是旧数据。
 
 **解决：** 在调用`aiRun()`之前，必须显式清洗D-Cache：
 
@@ -408,15 +410,15 @@ SCB_CleanDCache_by_Addr((uint32_t *)ai_input,
 
 **现象：** 检测框位置和大小完全错误（如23×24像素而非74×140像素），与PC端ONNX推理结果不一致。
 
-**原因：** YuNet原始模型的bbox输出是CHW格式 `[4, H, W]`（即 `bbox[channel][y][x]`），但STM32 Cube.AI编译后的网络实际输出为Interleaved格式 `[H*W, 4]`（即 `bbox[loc*4+ch]`）。两种索引方式产生的解码坐标完全不同。
+**原因：** YuNet原始模型的bbox输出是CHW格式 `[4, H, W]`（即 `bbox[channel][y][x]`），但STM32Cube AI Studio编译生成的网络实际输出为Interleaved格式 `[H*W, 4]`（即 `bbox[loc*4+ch]`）。两种索引方式产生的解码坐标完全不同。
 
-**解决：** 在USART调试输出中同时打印两种索引方式的结果，与PC端已知正确的ONNX输出比对，确认Cube.AI编译器实际使用Interleaved格式。最终采用 `bbox[loc*4+ch]` 索引方式。
+**解决：** 在USART调试输出中同时打印两种索引方式的结果，与PC端已知正确的ONNX输出比对，确认STM32Cube AI Studio编译生成的代码实际使用Interleaved格式。最终采用 `bbox[loc*4+ch]` 索引方式。
 
 ### 4.3 模型输出格式需要插入sigmoid
 
 **现象：** 初次部署时检测完全没有响应，所有score接近0或1的极端值。
 
-**原因：** PC端训练/导出ONNX时，最后一层sigmoid是内嵌在模型计算图中的。但通过Cube.AI编译后的模型可能将sigmoid层从计算图中分离或丢弃（取决于优化配置和模型导出方式）。
+**原因：** PC端训练/导出ONNX时，最后一层sigmoid是内嵌在模型计算图中的。但通过STM32Cube AI Studio编译后的模型可能将sigmoid层从计算图中分离或丢弃（取决于优化配置和模型导出方式）。
 
 **解决：** 在PC端重新导出ONNX，确保最后一层包含sigmoid。同时在`ai_postprocess`中直接使用cls和obj的乘积作为置信度（不再单独计算sigmoid）。对应Git提交：`b963a27 before add sigmod` → `977d790 before add sigmod to ai_detection.c` → `36cfd4a first run model on board ok`。
 
@@ -444,11 +446,11 @@ SCB_CleanDCache_by_Addr((uint32_t *)ai_input,
 
 ## 五、实验收获与心得
 
-1. **嵌入式AI部署的完整流水线认知：** 从PC端模型训练到Cube.AI编译，再到MCU上预处理→推理→后处理的完整闭环，实际踩过了Cache一致性、输出格式、量化精度等多个坑，对嵌入式AI的工程落地的理解从理论走向了实践。
+1. **嵌入式AI部署的完整流水线认知：** 从PC端模型训练到STM32Cube AI Studio编译生成C代码，再到MCU上预处理→推理→后处理的完整闭环，实际踩过了Cache一致性、输出格式、量化精度等多个坑，对嵌入式AI的工程落地的理解从理论走向了实践。
 
 2. **Cache一致性是嵌入式AI的最大陷阱：** D-Cache对于MCU性能至关重要，但在CPU写入/硬件读取的场景下会引入极其隐蔽的数据不一致bug。`SCB_CleanDCache_by_Addr`这一行代码是整个系统能跑通的关键，也让我深刻理解了ARMv7-M架构中Cache机制对AI推理的影响。
 
-3. **Cube.AI工具链的特性与局限：** Cube.AI能自动将ONNX编译为C代码并在STM32上运行，但编译器可能改变张量的内存布局（如CHW→Interleaved），需要在实际部署中通过调试输出来验证输出格式。不能盲目假设编译器产出的内存布局与原始模型框架一致。
+3. **STM32Cube AI Studio工具链的特性与局限：** STM32Cube AI Studio（ST.AI）能自动将ONNX编译为C代码并在STM32上运行，相比于旧版X-CUBE-AI/Cube.AI，引入了全新的ST.AI Embedded Client API（`stai_*`），代码更加精简。但编译器仍可能改变张量的内存布局（如CHW→Interleaved），需要在实际部署中通过调试输出来验证输出格式。不能盲目假设编译器产出的内存布局与原始模型框架一致。
 
 4. **SDRAM作为AI激活缓冲区的可行性：** 本项目的YuNet-320需要约2.46MB的激活内存，远超CM7的DTCM（128KB），必须使用外部SDRAM。虽然SDRAM延迟较高，但对于140MMACs的模型，推理时延仍在可接受范围（通过MPU配置为cacheable来缓解瓶颈）。
 
