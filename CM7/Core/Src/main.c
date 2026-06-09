@@ -376,7 +376,7 @@ int main(void)
 				/* Display detection count below the image (Line 26, Font16, y~416) */
 				UTIL_LCD_SetBackColor(UTIL_LCD_COLOR_WHITE);
 				UTIL_LCD_SetTextColor(UTIL_LCD_COLOR_BLACK);
-				sprintf((char *)My_String, "Faces detected: %d", num_detections);
+				sprintf((char *)My_String, "Faces detected: %02d", num_detections);
 				UTIL_LCD_DisplayStringAtLine(26, (uint8_t *)My_String);
 			}
 

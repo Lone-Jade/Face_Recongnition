@@ -1,0 +1,1 @@
+D:\PythonConda\envs\pytorch_face_detection\python.exe D:\EmbeddedSystem\Practice\BigHomework\Face_Detection\PC_side/send_image.py D:\EmbeddedSystem\Practice\BigHomework\My_photos
