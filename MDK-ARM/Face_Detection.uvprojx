@@ -554,6 +554,11 @@
               <FileType>1</FileType>
               <FilePath>../CM7/Core/Src/ai_detection.c</FilePath>
             </File>
+            <File>
+              <FileName>LCD_Display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\CM7\Core\Src\LCD_Display.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -2542,6 +2547,11 @@
               <FileName>ai_detection.c</FileName>
               <FileType>1</FileType>
               <FilePath>../CM7/Core/Src/ai_detection.c</FilePath>
+            </File>
+            <File>
+              <FileName>LCD_Display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\CM7\Core\Src\LCD_Display.c</FilePath>
             </File>
           </Files>
         </Group>
